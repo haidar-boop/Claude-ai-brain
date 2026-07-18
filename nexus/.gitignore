@@ -1,0 +1,21 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local Nexus data (databases, keys, backups, logs)
+*.db
+*.key
+nexus-data/
