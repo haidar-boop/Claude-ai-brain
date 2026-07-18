@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiforge-skill-elixir"
+version = "0.1.0"
+description = "Example out-of-tree AIForge skill: Elixir."
+requires-python = ">=3.11"
+dependencies = ["aiforge"]
+
+[project.entry-points."aiforge.skills"]
+elixir = "aiforge_skill_elixir:load_manifest"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aiforge_skill_elixir"]
+
+[tool.hatch.build]
+include = ["src/aiforge_skill_elixir/**/*.py", "src/aiforge_skill_elixir/**/*.toml"]

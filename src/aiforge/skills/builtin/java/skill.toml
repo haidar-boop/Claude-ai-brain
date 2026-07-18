@@ -1,0 +1,91 @@
+name = "java"
+description = "Modern Java (17+) idioms, the Spring ecosystem, and JVM performance considerations."
+
+languages = ["java"]
+
+frameworks = ["Spring Boot", "Hibernate", "JUnit", "Maven", "Gradle"]
+
+libraries = ["Jackson", "Guava", "Lombok", "SLF4J"]
+
+file_globs = ["*.java", "pom.xml", "build.gradle"]
+
+keywords = ["java", "spring", "maven", "gradle", "jvm", "hibernate"]
+
+patterns = [
+    "Use the Stream API (map/filter/reduce/collect) for declarative collection transformations instead of manual for-loops with mutable accumulators",
+    "Return Optional<T> from methods whose result may be absent, and chain it with map/flatMap/orElse instead of returning or checking for null",
+    "Model immutable data carriers with records (record Point(int x, int y) {}) instead of hand-written classes with boilerplate getters, equals, and hashCode",
+    "Acquire any Closeable/AutoCloseable resource in a try-with-resources statement so close() runs automatically, instead of manual try/finally",
+    "Use the builder pattern (often generated with Lombok's @Builder) for classes with many optional constructor parameters instead of telescoping constructors",
+    "Favor constructor injection over field injection in DI-managed classes so dependencies are explicit, final, and easy to supply in tests without a container",
+    "Implement single-method functional interfaces (Runnable, Comparator, Function<T,R>) with lambda expressions or method references instead of anonymous inner classes",
+    "Use sealed interfaces/classes with pattern-matching switch expressions to model closed, exhaustive type hierarchies",
+    "Declare local variables with var only when the right-hand side already makes the type obvious, to cut boilerplate without hurting readability",
+    "Favor composition and interface-based contracts over deep inheritance hierarchies for extensibility",
+]
+
+best_practices = [
+    "Keep methods small and single-purpose; extract private helper methods rather than writing long procedural blocks",
+    "Program to interfaces (List, Map) for field, parameter, and return types, reserving concrete types (ArrayList, HashMap) for the instantiation site",
+    "Make fields final and classes immutable by default; add mutability only when there is a concrete need for it",
+    "Use dependency injection (constructor injection in Spring) instead of static factories or singletons, to keep classes testable in isolation",
+    "Follow standard Java naming conventions: UpperCamelCase for classes, lowerCamelCase for methods and variables, ALL_CAPS for constants",
+    "Validate constructor and method arguments early with Objects.requireNonNull or Bean Validation annotations, failing fast instead of deep in the call stack",
+    "Keep public API surface minimal; default to package-private or private visibility unless a member must be exposed",
+    "Pin transitive dependency versions with a Maven BOM (dependencyManagement) or a Gradle platform, instead of letting them drift across modules",
+    "Write equals/hashCode/toString consistently, or let records or Lombok generate them, so objects behave correctly as map keys and in collections",
+    "Externalize configuration through application.yml/properties and environment variables instead of hardcoding values in source",
+]
+
+debugging = [
+    "Attach jdb for command-line breakpoint debugging, or use an IDE debugger against the same JDWP protocol for a graphical view",
+    "Launch a JVM with -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 to expose a remote debugging port for an IDE to attach to",
+    "Capture a thread dump with jstack <pid> (or kill -3) to diagnose deadlocks, stuck threads, or exhausted thread pools",
+    "Profile CPU usage and live object allocation with VisualVM or JDK Mission Control attached to a running JVM",
+    "Record low-overhead production profiles with Java Flight Recorder (jcmd <pid> JFR.start) and analyze them in JDK Mission Control",
+    "Take a heap dump with jmap -dump and inspect retained-size dominators in Eclipse MAT or VisualVM to chase memory leaks",
+    "Use jcmd <pid> <command> (e.g., GC.heap_info, Thread.print, VM.flags) as a lightweight alternative to separate jstack/jmap invocations",
+    "Enable verbose GC logging (-Xlog:gc*) to correlate latency spikes and throughput drops with specific collector behavior",
+    "Isolate a failing case with a focused test and step through it with conditional breakpoints instead of sprinkling System.out.println",
+]
+
+optimization = [
+    "Avoid autoboxing in hot loops by using primitive types or primitive-specialized collections instead of List<Integer>/Map<Integer,V>",
+    "Build strings incrementally with StringBuilder instead of += concatenation inside a loop, since String is immutable and each + allocates a new object",
+    "Reuse expensive-to-create objects (DateTimeFormatter, compiled Pattern) as shared static instances instead of recreating them per call",
+    "Size the heap explicitly with -Xms and -Xmx set to the same value in production to avoid runtime heap-resizing pauses",
+    "Choose a garbage collector deliberately (G1 for balanced throughput/latency, ZGC or Shenandoah for very low pause targets on large heaps) instead of leaving the default",
+    "Pool and reuse expensive resources such as database connections (HikariCP) instead of opening a new connection per request",
+    "Profile allocation and CPU hotspots with JFR or async-profiler before optimizing; JIT warmup and escape analysis often make manual micro-optimization unnecessary",
+    "Hoist immutable object creation out of tight loop bodies to reduce garbage collector pressure",
+    "Batch database writes with JDBC batch inserts/updates, or Hibernate's hibernate.jdbc.batch_size, instead of issuing one statement per row",
+    "Use an indexed for-loop instead of a stream pipeline on the rare hot path where boxing and lambda call overhead are shown to matter by a profiler",
+]
+
+testing = [
+    "Write tests with JUnit 5 (Jupiter), using @ParameterizedTest to cover multiple input cases without duplicating test methods",
+    "Mock collaborators with Mockito (@Mock, @InjectMocks, when/thenReturn) to isolate the unit under test from its dependencies",
+    "Write fluent, readable assertions with AssertJ (assertThat(x).isEqualTo(...).hasSize(...)) instead of chained JUnit assertEquals calls",
+    "Spin up real dependencies (Postgres, Kafka, Redis) in Docker containers with Testcontainers for integration tests instead of mocking the database layer",
+    "Use @SpringBootTest with a sliced context (@WebMvcTest, @DataJpaTest) to test one layer instead of always booting the full application context",
+    "Verify interaction behavior with Mockito's verify() to assert a collaborator was called with the expected arguments and call count",
+    "Use @BeforeEach/@AfterEach lifecycle hooks for setup and teardown instead of duplicating initialization in every test method",
+    "Tag slow or integration tests (@Tag(\"integration\")) so CI can run fast unit tests separately from slower suites",
+]
+
+review_rules = [
+    "Flag catch (Exception e) or catch (Throwable t) blocks that should catch a specific exception type, since broad catches hide bugs and swallow unrelated errors",
+    "Flag any Closeable/AutoCloseable resource (stream, connection, file) opened without a try-with-resources statement, which leaks handles on exceptions",
+    "Flag mutable static fields used as shared state, which break thread safety and make tests order-dependent",
+    "Flag methods that return null instead of Optional<T> for a possibly-absent single value, or an empty collection for a possibly-empty list or map",
+    "Flag JPA/Hibernate entity associations accessed inside a loop, which produce N+1 query patterns; require a JOIN FETCH, @EntityGraph, or batch fetching instead",
+    "Flag empty catch blocks that discard an exception without logging or rethrowing it",
+    "Flag public mutable fields on classes; require private fields with controlled accessors or immutable records",
+    "Flag == used to compare boxed types like Integer or String instead of .equals(), which breaks outside the cached small-integer or interned-string range",
+    "Flag manually written equals/hashCode/toString on a simple data class where a record would generate all three correctly",
+    "Flag per-row database calls inside a loop that could be replaced with a single batched statement",
+]
+
+documentation_style = "Write Javadoc comments (/** ... */) on public classes, interfaces, and methods: a concise summary sentence first, followed by @param, @return, and @throws tags for each parameter, return value, and checked exception; carry package-level overviews in package-info.java rather than a class comment."
+
+requires = []

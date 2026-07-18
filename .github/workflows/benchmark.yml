@@ -1,0 +1,49 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: benchmark-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install AIForge (dev + fast extras)
+        run: pip install -e ".[dev,fast]"
+
+      # Shared GitHub-hosted runners are noisy, variable-performance hardware,
+      # so this job is informational only: it runs the benchmark suite and
+      # publishes the results as an artifact, but does not fail the build on
+      # a regression -- there's no reliable fixed threshold on hardware this
+      # inconsistent. Compare artifacts across runs by hand when investigating
+      # a suspected regression.
+      - name: Run benchmarks
+        run: pytest benchmarks/ --benchmark-only --benchmark-json=benchmark-results.json
+
+      - name: Measure startup (time + memory)
+        run: python scripts/measure_startup.py | tee startup-report.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results.json
+            startup-report.txt
+          retention-days: 90

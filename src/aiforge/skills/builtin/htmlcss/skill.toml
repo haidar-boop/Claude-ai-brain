@@ -1,0 +1,89 @@
+name = "htmlcss"
+description = "Semantic HTML5, modern CSS layout, accessibility, and responsive design."
+
+languages = ["html", "css"]
+
+frameworks = ["Tailwind CSS", "Bootstrap", "CSS Grid", "Flexbox"]
+
+libraries = []
+
+file_globs = ["*.html", "*.css", "*.scss"]
+
+keywords = ["html", "css", "flexbox", "grid", "tailwind", "accessibility", "aria"]
+
+patterns = [
+    "Use semantic HTML5 elements (nav, main, article, section, header, footer, aside) instead of generic div/span so the document outline and accessibility tree convey structure for free",
+    "Choose Flexbox for one-dimensional layout (a single row or column of items) and CSS Grid for two-dimensional layout (rows and columns together); reach for Grid when defining a page-level template",
+    "Define design tokens as CSS custom properties (--color-primary, --spacing-unit) on :root and reference them with var() instead of hard-coding repeated values throughout the stylesheet",
+    "Follow BEM naming (block__element--modifier) to keep class names self-documenting and avoid specificity wars between unrelated components",
+    "Write mobile-first CSS: author base styles for small viewports first, then layer on min-width media queries to progressively enhance for larger screens",
+    "Use container queries (@container) when a component's layout should respond to its containing element's size rather than the viewport's",
+    "Understand the cascade and specificity order (inline style > ID > class/attribute/pseudo-class > element) to predict which declaration wins instead of reaching for !important",
+    "Use logical properties (margin-inline, padding-block, inset) instead of physical ones (margin-left, top) so layouts adapt automatically to RTL/LTR writing modes",
+    "Group related form controls with fieldset and legend, and associate every input with a label via the for/id pair or by wrapping it",
+    "Use CSS Grid's grid-template-areas for named, self-documenting layout regions instead of numbered grid-column/grid-row lines once a layout has more than a couple of tracks",
+]
+
+best_practices = [
+    "Write valid, well-formed HTML that passes the W3C validator so browsers render it as intended instead of guessing through error-recovery parsing",
+    "Keep selector specificity low and flat; avoid ID selectors and deeply nested chains that force later overrides into a specificity arms race",
+    "Reset or normalize default browser styling (e.g. modern-normalize) before applying custom styles so the baseline renders consistently across browsers",
+    "Author spacing and typography in relative units (rem, em, %) instead of fixed px so pages scale correctly with the user's browser font-size preference",
+    "Progressively enhance: make sure core content and navigation work with plain HTML/CSS before layering on JavaScript-dependent behavior",
+    "Organize CSS by component (ITCSS layering or a folder-per-component structure) instead of one monolithic stylesheet with unpredictable cascade order",
+    "Set a proper viewport meta tag (width=device-width, initial-scale=1) so mobile browsers render at actual device width instead of faking a desktop viewport",
+    "Keep heading hierarchy meaningful (a single h1, nested h2-h6 without skipping levels) so the document outline reflects actual content structure",
+    "Test rendering across at least one WebKit, Blink, and Gecko based browser, since flexbox/grid edge cases and form control styling still diverge between engines",
+]
+
+debugging = [
+    "Use the browser DevTools Elements/Inspector panel to view the live DOM and computed styles, and toggle individual declarations to isolate a rendering bug",
+    "Use the DevTools accessibility tree inspector to see how an element is exposed to assistive technology (role, name, state) versus how it merely looks visually",
+    "Run a Lighthouse audit, in DevTools or via the CLI, to surface performance, accessibility, SEO, and best-practices issues with actionable scores",
+    "Use the DevTools Layout/Grid/Flexbox overlay to visualize grid lines, flex item sizing, and gaps directly on the rendered page",
+    "Enable paint flashing and layout shift regions in the DevTools Rendering tab to see exactly which elements repaint or shift unexpectedly",
+    "Use the Network panel's throttling plus the Performance panel's flame chart to diagnose slow first paint caused by render-blocking CSS",
+    "Use the DevTools Coverage tab to find unused CSS bytes shipped on a page",
+    "Toggle device emulation and responsive design mode to reproduce viewport-specific layout bugs without needing physical devices",
+    "Inspect the computed styles panel and matched CSS rules list to trace which selector actually won under the cascade for a given element",
+]
+
+optimization = [
+    "Batch DOM reads and writes separately, e.g. via requestAnimationFrame, to avoid layout thrashing caused by interleaving offsetHeight reads with style writes",
+    "Animate only transform and opacity, which the compositor can handle on the GPU, instead of properties like width/top/left that force layout and paint on every frame",
+    "Extract and inline critical above-the-fold CSS so first paint doesn't block on the full stylesheet download, then load the rest without blocking render",
+    "Minimize reflow-triggering property changes (width, height, margin, position) inside hot code paths such as scroll or resize handlers",
+    "Use content-visibility: auto on offscreen sections so the browser can skip layout and paint work for content that isn't visible yet",
+    "Serve responsive images with srcset/sizes and modern formats (WebP/AVIF) so browsers fetch only the resolution actually needed",
+    "Minify CSS and strip unused rules, e.g. with PurgeCSS or Tailwind's built-in purge, to cut stylesheet download and parse time",
+    "Use font-display: swap and preload key web fonts to avoid invisible text (FOIT) blocking render while fonts are still loading",
+    "Reduce selector complexity in large stylesheets, since deeply nested descendant selectors cost more during style recalculation on large DOM trees",
+]
+
+testing = [
+    "Use visual regression testing (Percy or Chromatic) to catch unintended pixel-level layout or style changes on every pull request",
+    "Run Lighthouse CI in the build pipeline to enforce performance and accessibility score budgets and fail the build on regression",
+    "Run axe-core, via @axe-core/cli, jest-axe, or the axe DevTools extension, to automatically catch WCAG violations like missing labels or insufficient contrast",
+    "Write component tests with Testing Library that query by accessible role or label rather than CSS selectors, so tests validate what users and assistive tech perceive",
+    "Manually test keyboard-only navigation (Tab, Shift+Tab, Enter, Space, Esc) to confirm every interactive element is reachable and operable without a mouse",
+    "Test periodically with a real screen reader (VoiceOver, NVDA, or JAWS), since automated tools like axe-core only catch a subset of accessibility issues",
+    "Use cross-browser testing services (BrowserStack, Sauce Labs) or Playwright's multi-browser runner to catch WebKit/Gecko-specific CSS bugs before release",
+    "Use Storybook with a visual testing addon to catch regressions in isolated component states such as hover, focus, and disabled",
+]
+
+review_rules = [
+    "Flag img tags missing alt text, or missing an empty alt=\"\" on purely decorative images, which breaks screen reader access to image content",
+    "Flag non-semantic div-soup markup (div/span used for everything) where a semantic element like nav, button, or article would convey structure and behavior for free",
+    "Flag inline style=\"...\" attributes used instead of classes, which bypass the cascade, can't be reused, and are harder to override or theme",
+    "Flag color combinations with a contrast ratio below WCAG AA (4.5:1 for normal text, 3:1 for large text) as measured by a contrast checker",
+    "Flag interactive elements with focus outlines removed (outline: none) without a visible custom :focus-visible replacement, which breaks keyboard navigation",
+    "Flag fixed pixel units for font-size and spacing where rem/em/% would let the layout scale with the user's browser font-size preference",
+    "Flag clickable elements built from div/span with an onclick handler instead of a real button or a element, which lack keyboard focusability and semantics for free",
+    "Flag use of !important to win a specificity fight, which signals an underlying specificity or architecture problem rather than fixing one",
+    "Flag a missing lang attribute on the html element, which breaks screen reader pronunciation and translation tooling",
+    "Flag form inputs without an associated label, via the for/id pair or by wrapping, which leaves screen reader users without field context",
+]
+
+documentation_style = "Document CSS with section-header comments (e.g. /* ===== Component: Card ===== */) that delineate component boundaries, and let self-documenting BEM class names carry structural intent so comments aren't needed to explain what a rule targets; reserve inline comments for explaining non-obvious workarounds, such as a specific browser bug fix, rather than restating what a declaration does."
+
+requires = []

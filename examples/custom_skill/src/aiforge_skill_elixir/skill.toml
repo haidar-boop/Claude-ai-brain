@@ -1,0 +1,36 @@
+name = "elixir"
+description = "Elixir language, OTP concurrency model, and the Phoenix web framework."
+languages = ["elixir"]
+frameworks = ["Phoenix", "OTP", "Ecto"]
+libraries = ["ExUnit", "StreamData"]
+file_globs = ["*.ex", "*.exs", "mix.exs"]
+keywords = ["elixir", "phoenix", "otp", "genserver", "mix", "erlang"]
+patterns = [
+  "Use pattern matching in function heads instead of conditional branching.",
+  "Model state with GenServer/Agent rather than mutable variables.",
+  "Pipe (|>) transformations instead of deeply nested function calls.",
+  "Let processes crash and rely on supervisors to restart them (let it crash).",
+]
+best_practices = [
+  "Follow the community style guide; run `mix format` and `credo`.",
+  "Prefer immutable data transformations over in-place mutation.",
+  "Keep GenServer callbacks small; push heavy work into a Task.",
+]
+debugging = [
+  "IEx.pry for interactive breakpoints inside a running session.",
+  "Observer (:observer.start()) for process and supervision-tree inspection.",
+  ":sys.get_state/1 to inspect a GenServer's state without changing it.",
+]
+optimization = [
+  "Avoid unbounded process mailboxes; apply backpressure with GenStage if needed.",
+  "Use ETS for shared read-heavy state instead of a bottlenecked GenServer.",
+  "Benchmark with Benchee before assuming a hot path needs rewriting.",
+]
+testing = ["ExUnit for unit/integration tests", "property-based testing with StreamData"]
+review_rules = [
+  "Unhandled {:error, reason} tuples instead of explicit pattern matching.",
+  "Blocking calls inside a GenServer's handle_call without a timeout strategy.",
+  "Business logic embedded in Phoenix controllers instead of context modules.",
+]
+documentation_style = "@doc / @moduledoc with doctest-verified examples."
+requires = []

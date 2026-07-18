@@ -1,0 +1,21 @@
+# Shipped defaults. Overridden by ./aiforge.toml (or $AIFORGE_CONFIG), which
+# is in turn overridden by AIFORGE__SECTION__KEY environment variables.
+# Never put secrets here -- provider credentials are read from the
+# environment only (e.g. ANTHROPIC_API_KEY), never from this file.
+
+[engine]
+default_provider = "anthropic"
+
+[providers.anthropic]
+model = "claude-opus-4-8"
+max_tokens = 4096
+max_retries = 2
+timeout = 600.0
+
+[routing]
+fallback_order = []
+max_attempts = 2
+
+[skills]
+disabled = []
+extra_dirs = []

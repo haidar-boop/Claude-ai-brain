@@ -1,0 +1,81 @@
+name = "typescript"
+description = "TypeScript type system and patterns for safer, more maintainable JavaScript."
+
+languages = ["typescript"]
+frameworks = ["React", "NestJS", "Angular", "tRPC", "Next.js"]
+libraries = ["zod", "type-fest", "ts-pattern"]
+file_globs = ["*.ts", "*.tsx", "tsconfig.json"]
+keywords = ["typescript", "ts", "tsx", "interface", "generic", "type-safe"]
+requires = []
+
+patterns = [
+    "Bound generic type parameters with extends (e.g. function pluck<T, K extends keyof T>(obj: T, key: K): T[K]) instead of accepting unconstrained T",
+    "Model variant data as discriminated unions with a shared literal tag field, then narrow with switch or if-checks on that tag",
+    "Derive new shapes from existing types with Partial, Pick, Omit, and Record instead of hand-duplicating fields",
+    "Use conditional types (T extends U ? X : Y) and mapped types ({ [K in keyof T]: ... }) to transform or derive types programmatically",
+    "Enable strictNullChecks and thread null/undefined through the type signature instead of suppressing them",
+    "Narrow types with typeof/instanceof guards and custom user-defined type predicates (function isX(v): v is X)",
+    "Use the satisfies operator to check a literal against a type while preserving its narrowed inferred type",
+    "Use declaration merging to extend ambient interfaces (e.g. augmenting Express.Request or a global namespace)",
+    "Use template literal types to model constrained string patterns (e.g. `on${Capitalize<Event>}`)",
+    "Create branded/nominal types via intersection with a unique tag to prevent structurally-identical types from being mixed up",
+]
+
+best_practices = [
+    "Enable strict: true in tsconfig rather than opting into individual strictness flags piecemeal",
+    "Prefer unknown over any for values of uncertain type and narrow before use",
+    "Use interface for object shapes that may be extended or declaration-merged, and type for unions, intersections, and utility compositions",
+    "Avoid type assertions (as) except at trust boundaries such as parsing external data, and pair them with runtime validation",
+    "Model impossible states as unrepresentable with discriminated unions instead of bags of optional flags",
+    "Use readonly and as const to prevent accidental mutation of arrays, tuples, and object literals",
+    "Prefer composition over deep generic inheritance hierarchies to keep inferred types readable",
+    "Explicitly type exported function parameters and return values instead of relying on inference across module boundaries",
+    "Use a schema library like zod as the single source of truth for both runtime validation and static types via z.infer",
+    "Prefer a union of string literals or an as-const object map over TypeScript enum to avoid enum's runtime and interop pitfalls",
+]
+
+debugging = [
+    "Run tsc --noEmit for fast type-checking feedback in CI or a pre-commit hook without producing build output",
+    "Use tsc --extendedDiagnostics or --generateTrace to profile slow compilations and find expensive type instantiations",
+    "Enable sourceMap in tsconfig and step through original TypeScript source when debugging ts-node or transpiled output",
+    "Rely on the TypeScript language server (tsserver) in-editor for hover types, go-to-definition, and quick fixes on type errors",
+    "Use tsc --traceResolution or --listFiles to diagnose module resolution and path-mapping problems",
+    "Run the type-coverage CLI to measure what percentage of the codebase is typed versus falling back to any",
+    "Delete stale .tsbuildinfo files and restart the TS server when incremental builds report errors that no longer exist in source",
+]
+
+optimization = [
+    "Flatten or cap deeply recursive conditional/generic types that trigger 'type instantiation is excessively deep' errors",
+    "Enable incremental: true with a tsBuildInfoFile so repeat builds only recheck changed files",
+    "Split large monorepos into project references (composite: true, references[]) so packages build and type-check independently",
+    "Prefer interfaces over large intersection types for object shapes, since the checker caches and displays them more efficiently",
+    "Narrow tsconfig include/exclude to avoid type-checking generated output, fixtures, or unrelated packages",
+    "Set skipLibCheck: true to skip re-checking .d.ts files pulled in from node_modules and cut build time",
+    "Avoid long chains of nested utility types (e.g. Pick<Omit<Partial<T>>>) that slow down language-server responsiveness",
+    "Use isolatedModules with an esbuild/swc transpile-only step for fast builds, and run tsc --noEmit separately for full type-checking",
+]
+
+testing = [
+    "Use Vitest for native ESM and TypeScript support without a separate transform pipeline",
+    "Use Jest with the ts-jest or @swc/jest transform when the project is committed to Jest for TypeScript test files",
+    "Type test fixtures and mocks with Partial<T> or typed factory functions instead of casting through any",
+    "Use tsd or expect-type to assert type-level correctness, such as a generic function resolving to the expected literal type",
+    "Run vitest --typecheck to execute type-level assertions alongside runtime tests in the same suite",
+    "Type mocked dependencies with jest.Mocked<T> or vi.mocked() so mocks stay in sync with the real interface",
+    "Test discriminated union exhaustiveness by asserting the narrowed type is never in the default/else branch",
+]
+
+review_rules = [
+    "Flag any used where unknown plus narrowing, or a proper generic/union type, would express the value correctly",
+    "Flag the non-null assertion operator (!) used to silence a possibly-null value instead of a real guard or default",
+    "Flag switch statements over discriminated unions that lack an exhaustiveness check (no default case asserting never)",
+    "Flag disabled strictness flags in tsconfig, such as strict: false, noImplicitAny: false, or strictNullChecks: false",
+    "Flag @ts-ignore or @ts-expect-error comments with no explanation of why the suppression is needed",
+    "Flag type assertions that cast across unrelated types, especially double-casts through as unknown as X, without validation",
+    "Flag exported functions or public APIs with implicit any parameters or return types",
+    "Flag enum usage where a union of string literals would be simpler, safer, and more tree-shakeable",
+    "Flag catch blocks typed as catch (e: any) instead of narrowing the caught value from unknown",
+    "Flag interfaces or types that duplicate fields from an existing type instead of deriving them with Pick, Omit, or Partial",
+]
+
+documentation_style = "TSDoc-style block comments (/** ... */) with @param, @returns, and @throws tags on exported declarations; let the type system carry parameter and return types instead of restating them in prose, and use the comment body to explain intent, edge cases, and non-obvious constraints."

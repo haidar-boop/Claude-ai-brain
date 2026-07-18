@@ -1,0 +1,87 @@
+name = "cpp"
+description = "Modern C++ (C++17/20) memory safety, RAII, and performance-critical systems programming."
+
+languages = ["c++", "cpp"]
+frameworks = ["Qt", "Boost", "CMake"]
+libraries = ["STL", "fmt", "Google Test"]
+file_globs = ["*.cpp", "*.cc", "*.hpp", "*.h", "CMakeLists.txt"]
+keywords = ["c++", "cpp", "raii", "smart pointer", "template", "cmake"]
+
+patterns = [
+  "Use RAII to bind resource lifetime (memory, file handles, locks, sockets) to object scope so destructors handle cleanup automatically.",
+  "Prefer std::unique_ptr for exclusive ownership and std::shared_ptr only when shared ownership is truly required; avoid shared_ptr as a default.",
+  "Break shared_ptr reference cycles with std::weak_ptr, e.g. in parent-child or observer relationships.",
+  "Implement move constructors and move assignment as noexcept so containers like std::vector use moves instead of copies during reallocation.",
+  "Follow the Rule of Five or, better, the Rule of Zero: let compiler-generated special members work by composing classes from RAII-owning members instead of managing raw resources directly.",
+  "Use std::optional<T> to represent values that may be absent instead of sentinel values, null pointers, or bool-plus-out-parameter pairs.",
+  "Use std::variant<Ts...> with std::visit for closed-set type-safe unions instead of raw unions or inheritance-based polymorphism.",
+  "Use constexpr and consteval (C++20) to force compile-time evaluation of constants and simple functions, shrinking runtime work.",
+  "Use C++20 ranges and views (std::ranges::views::filter/transform) to compose lazy, allocation-free pipelines instead of manual index loops.",
+  "Constrain templates with C++20 concepts instead of SFINAE tricks or unconstrained templates that produce cryptic error walls.",
+]
+
+best_practices = [
+  "Enable a strict warning set (-Wall -Wextra -Wpedantic -Wconversion, or /W4) and treat warnings as errors on every build.",
+  "Mark single-argument constructors explicit to prevent unintended implicit conversions.",
+  "Default to const and constexpr; mark member functions const whenever they don't mutate observable state.",
+  "Pass small/trivial types by value and non-trivial types by const reference; take by value plus std::move only when the callee needs its own copy.",
+  "Use std::make_unique and std::make_shared instead of raw new to avoid owning raw pointers and to get exception safety.",
+  "Prefer standard library containers and algorithms (std::sort, std::accumulate, std::vector) over hand-rolled equivalents.",
+  "Scope library code in namespaces and never write `using namespace std;` in a header.",
+  "Initialize every member variable via the initializer list or a default member initializer; never leave one uninitialized.",
+  "Mark virtual function overrides with override, and use final where further overriding is not intended, to catch signature mismatches at compile time.",
+  "Prefer std::span or a container reference (C++20) over raw pointer-plus-length pairs when passing contiguous data.",
+]
+
+debugging = [
+  "Use gdb (`gdb --args ./binary args`, `bt`, `bt full`, `watch`, `p var`) or lldb for interactive breakpoint debugging.",
+  "Build with AddressSanitizer (`-fsanitize=address -g`) to catch heap/stack buffer overflows, use-after-free, and double-free at runtime.",
+  "Build with UndefinedBehaviorSanitizer (`-fsanitize=undefined`) to catch signed overflow, null dereference, misaligned access, and invalid casts.",
+  "Use ThreadSanitizer (`-fsanitize=thread`) to detect data races and deadlocks in multithreaded code.",
+  "Run Valgrind's memcheck (`valgrind --leak-check=full ./binary`) for leak and invalid-access detection when sanitizer builds aren't available.",
+  "Enable core dumps (`ulimit -c unlimited`) and inspect them post-mortem with `gdb ./binary core`.",
+  "Combine `-fsanitize=address,undefined -fno-omit-frame-pointer` in debug/CI builds for coverage plus readable stack traces.",
+  "Run clang-tidy and cppcheck as static analyzers to catch use-after-move, dangling references, and null dereferences before runtime.",
+  "Use `rr` (record and replay debugger) for deterministic, reversible replay of hard-to-reproduce crashes.",
+]
+
+optimization = [
+  "Pass large objects by const reference, std::string_view, or std::span rather than by value to avoid unnecessary copies.",
+  "Use std::move to transfer ownership of temporaries and rvalues instead of copying, especially when returning local containers.",
+  "Call vector::reserve up front when the final size is known, to avoid repeated reallocation and element copying.",
+  "Design data layout for cache locality (structure-of-arrays / data-oriented design) instead of pointer-chasing through scattered objects.",
+  "Avoid virtual dispatch in hot inner loops; use templates, CRTP, or std::variant plus std::visit for static dispatch instead.",
+  "Mark classes or methods final where no further overriding is needed so the compiler can devirtualize and inline calls.",
+  "Profile before optimizing with `perf record` / `perf report` (Linux) or gprof to find real hot spots instead of guessing.",
+  "Check cache-miss and branch-misprediction rates on suspected hot paths with `perf stat` or `valgrind --tool=cachegrind`.",
+  "Pick algorithms and containers by measured complexity needs (e.g. std::unordered_map vs. repeated linear scans) once profiling names the bottleneck.",
+  "Construct in place with emplace_back/try_emplace instead of constructing a temporary and then copying or moving it into a container.",
+]
+
+testing = [
+  "Use Google Test (gtest) with TEST/TEST_F fixtures and ASSERT_*/EXPECT_* macros for unit tests.",
+  "Use Catch2 for header-only, BDD-style tests (SECTION, GIVEN/WHEN/THEN) when a lighter-weight framework fits better.",
+  "Use Google Mock (gmock) to mock abstract interfaces and verify call expectations with EXPECT_CALL.",
+  "Run the test suite under AddressSanitizer and UndefinedBehaviorSanitizer in CI, not only in a plain debug build, so memory bugs fail tests instead of passing silently.",
+  "Use CTest, bundled with CMake, to register and run test binaries as part of the build, including parallel execution.",
+  "Write death tests (ASSERT_DEATH) to verify code paths expected to abort or terminate on invalid input.",
+  "Fuzz parsing and serialization code with libFuzzer or AFL++ to surface crashes on malformed input.",
+  "Parameterize repetitive cases with TEST_P/INSTANTIATE_TEST_SUITE_P in gtest instead of duplicating near-identical test bodies.",
+]
+
+review_rules = [
+  "Flag raw owning pointers (manual new/delete pairs, a raw T* that outlives its creating scope) that should be std::unique_ptr or std::shared_ptr instead.",
+  "Flag a base class with virtual methods that has a non-virtual or missing destructor; deleting through a base pointer is undefined behavior.",
+  "Flag signed integer overflow, e.g. incrementing an int toward INT_MAX in a loop, which is undefined behavior in C++, not defined wraparound.",
+  "Flag use-after-free and dangling references, such as returning a reference to a local variable or binding a reference to a temporary that outlives it.",
+  "Flag uninitialized reads: member variables or locals used before being given a value.",
+  "Flag large objects (structs, std::string, std::vector, etc.) passed by value into functions that don't need to own or mutate a copy; should be const reference.",
+  "Flag missing const-correctness: member functions that don't mutate state but aren't marked const, or pointer/reference parameters that could be const but aren't.",
+  "Flag use of a moved-from object without reassignment, i.e. reading a variable's value after std::move(x) as if it were untouched.",
+  "Flag catch(...) or catch-by-value blocks that swallow exceptions without rethrowing or logging, hiding real errors.",
+  "Flag C-style casts ((Type)x) instead of static_cast/dynamic_cast/const_cast/reinterpret_cast, which hide intent and bypass compiler safety checks.",
+]
+
+requires = []
+
+documentation_style = "Doxygen-style comments (/** ... */ blocks or /// triple-slash lines) placed above declarations in header files, using @brief, @param, @return, and @throws tags; document ownership/lifetime semantics for pointer and reference parameters and return values, and note class invariants and preconditions."

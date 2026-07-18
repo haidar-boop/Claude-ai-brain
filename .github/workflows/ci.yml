@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install AIForge (dev + anthropic + fast extras)
+        run: pip install -e ".[dev,anthropic,fast]"
+
+      - name: Run tests with coverage
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 14
+
+      - name: Verify package imports with zero required dependencies
+        # A separate venv with no extras installed, proving the runtime
+        # dependency-free claim rather than just asserting it in docs.
+        run: |
+          python -m venv /tmp/aiforge-bare-venv
+          /tmp/aiforge-bare-venv/bin/pip install -e .
+          /tmp/aiforge-bare-venv/bin/python -c "import aiforge; print(aiforge.__version__)"
+
+      - name: Repository size report
+        if: matrix.python-version == '3.11'
+        run: python scripts/repo_size_report.py

@@ -1,0 +1,89 @@
+name = "go"
+description = "Go concurrency model, error handling idiom, and standard-library-first design."
+
+languages = ["go", "golang"]
+
+frameworks = ["net/http", "Gin", "Echo", "gRPC-Go"]
+
+libraries = ["testify", "zap", "cobra"]
+
+file_globs = ["*.go", "go.mod", "go.sum"]
+
+keywords = ["go", "golang", "goroutine", "channel", "gofmt", "go mod"]
+
+patterns = [
+    "Launch concurrent work with the go keyword and coordinate through channels rather than shared memory guarded by locks - share memory by communicating",
+    "Use a select statement to multiplex over several channel operations at once, with a default case for non-blocking selects or a time.After case to bound a wait",
+    "Check errors immediately after the call that can produce them using the if err != nil idiom, returning early instead of nesting the success path",
+    "Wrap errors with fmt.Errorf and the %w verb to preserve the underlying error for errors.Is and errors.As, instead of losing context with %v or string concatenation",
+    "Define small interfaces at the point of use on the consumer side and rely on implicit satisfaction - a type implements an interface just by having the right methods",
+    "Favor composition over inheritance: embed a struct or interface in another struct to reuse and promote its methods instead of building a class hierarchy",
+    "Thread context.Context as the first parameter of any function that performs I/O, blocks, or spawns goroutines, so callers can cancel or bound it",
+    "Derive child contexts with context.WithCancel, context.WithTimeout, or context.WithDeadline, and always call the returned cancel function, typically via defer",
+    "Return a (value, error) pair from fallible functions instead of relying on exceptions or sentinel panics for ordinary control flow",
+    "Pair every successful resource acquisition (file, lock, connection) with an immediate defer of its cleanup call",
+]
+
+best_practices = [
+    "Run gofmt or goimports on save so formatting is settled by tooling rather than review debate",
+    "Keep package names short, lowercase, and free of underscores, and avoid stutter such as http.HTTPServer when http.Server already says it",
+    "Accept interfaces as parameters but return concrete struct types from constructors, so callers get a minimal dependency and a fully-specified result",
+    "Run go vet and a linter such as golangci-lint in CI to catch suspicious constructs before merge",
+    "Manage dependencies with go.mod and go.sum, and tag public modules with semantic versions",
+    "Prefer the standard library (net/http, encoding/json, log/slog) over a third-party package when it already covers the need",
+    "Keep unexported identifiers lowercase and export only the surface callers actually need",
+    "Document every exported identifier with a comment that starts with the identifier's own name, matching go doc conventions",
+    "Pass dependencies explicitly through constructors instead of reaching for package-level mutable globals",
+    "Treat every returned error as something to handle or propagate; never discard one with a bare underscore without a comment explaining why",
+]
+
+debugging = [
+    "Use the delve debugger (dlv debug, dlv test, dlv attach) for breakpoint-based debugging instead of littering code with print statements",
+    "Run go test -race or go run -race to catch data races that only manifest under specific goroutine interleavings",
+    "Profile CPU and memory with go tool pprof against net/http/pprof endpoints or runtime/pprof-generated profiles",
+    "Use go tool trace to visualize goroutine scheduling, GC pauses, and blocking events on a captured execution trace",
+    "Send SIGQUIT to a hung process (or call runtime.Stack) to dump every goroutine's stack and pinpoint a deadlock",
+    "Run go vet to catch suspicious constructs such as Printf format/argument mismatches, bad struct tags, or unreachable code",
+    "Add structured logging fields (with log/slog or zap) around request boundaries to trace concurrent flows in production",
+    "Isolate a failing case with go test -run <TestName> -v before attaching a debugger to it",
+]
+
+optimization = [
+    "Prevent goroutine leaks by giving every goroutine a clear exit path, typically a context.Context cancellation or a dedicated done channel",
+    "Choose buffered versus unbuffered channels deliberately: unbuffered channels synchronize sender and receiver, buffered channels decouple them up to the buffer size",
+    "Benchmark with testing.B (go test -bench=. -benchmem) before and after a change to confirm an optimization actually helped",
+    "Check escape analysis output (go build -gcflags=\"-m\") to see which values escape to the heap and look for ways to keep them stack-allocated",
+    "Reuse short-lived, frequently allocated objects such as buffers with sync.Pool to reduce garbage collector pressure",
+    "Preallocate slices with make([]T, 0, n) when the final size is known, avoiding repeated grow-and-copy on append",
+    "Build strings with strings.Builder instead of repeated + concatenation in a loop",
+    "Bound concurrency with a worker pool or a semaphore channel instead of spawning an unbounded goroutine per unit of work",
+    "Keep hot-path values as concrete types rather than boxed interfaces to avoid indirect dispatch and extra allocation",
+]
+
+testing = [
+    "Write table-driven tests: a slice of struct test cases driven through t.Run(tc.name, ...) subtests",
+    "Measure coverage with go test -cover and inspect gaps visually with go tool cover -html",
+    "Use testify's assert and require packages for expressive, single-line assertions instead of manual if-then-t.Errorf blocks",
+    "Test HTTP handlers with httptest.NewServer for full round trips or httptest.NewRecorder for direct handler invocation, without a real network listener",
+    "Mark independent subtests with t.Parallel() to shorten overall suite runtime",
+    "Run go test ./... -race in CI so race conditions surface before they reach production",
+    "Generate or hand-write mocks for interfaces under test with gomock or testify/mock",
+    "Register teardown with t.Cleanup instead of scattering manual defer calls through a test function",
+]
+
+review_rules = [
+    "Flag ignored error return values (result, _ := ...) that have no comment explaining why the error is safe to drop",
+    "Flag goroutines started with go func(){...}() that have no context, done channel, or other mechanism to stop them",
+    "Flag unbuffered channel sends and receives that occur on the same goroutine, which deadlocks immediately",
+    "Flag interface{} or any used where a concrete type or a small purpose-built interface would keep the code type-safe",
+    "Flag exported functions that perform I/O or block without accepting a context.Context as their first parameter",
+    "Flag a context.Context stored in a struct field instead of being passed explicitly through the call chain",
+    "Flag fmt.Errorf calls that wrap an underlying error without the %w verb, which breaks errors.Is and errors.As downstream",
+    "Flag a resource acquisition (file, lock, connection) that is not immediately followed by a deferred close or unlock",
+    "Flag naked returns in functions long enough that the returned values are no longer obvious to a reader",
+    "Flag panic used for ordinary, expected error conditions instead of returning an error value",
+]
+
+documentation_style = "Write Go doc comments as a comment block immediately preceding the declaration, beginning with the identifier's own name (e.g. \"Server handles incoming requests.\"), in complete sentences that go doc and pkg.go.dev can render directly; give each package a short overview comment in a doc.go file or above its package clause."
+
+requires = []
