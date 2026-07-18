@@ -132,6 +132,17 @@ def test_configure_seeds_cache_for_subsequent_require() -> None:
     assert registry.require("fake") is configured
 
 
+def test_factory_can_consult_registry_without_deadlock() -> None:
+    # The lock is an RLock: a factory that itself reads the registry on the
+    # same thread (e.g. a wrapper provider) must not deadlock.
+    registry = ProviderRegistry()
+    registry.register_factory("inner", lambda: FakeProvider(model="inner-model"))
+    registry.register_factory(
+        "outer", lambda: FakeProvider(model=f"wraps-{registry.require('inner').model}")
+    )
+    assert registry.require("outer").model == "wraps-inner-model"
+
+
 def test_get_or_create_returns_one_shared_instance_under_concurrency() -> None:
     # Regression: the instance cache used an unlocked check-then-build-then-
     # write, so concurrent first calls each built their own instance.

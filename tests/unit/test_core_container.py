@@ -39,6 +39,17 @@ def test_register_instance_is_returned_directly() -> None:
     assert container.resolve(key) == "hello"
 
 
+def test_factory_can_resolve_other_keys_without_deadlock() -> None:
+    # The lock is an RLock: a factory composing other registrations
+    # (nested resolve on the same thread) must work, not deadlock.
+    container = Container()
+    part_key: Key[str] = Key("part")
+    whole_key: Key[str] = Key("whole")
+    container.register(part_key, lambda: "engine")
+    container.register(whole_key, lambda: f"car with {container.resolve(part_key)}")
+    assert container.resolve(whole_key) == "car with engine"
+
+
 def test_singleton_resolve_is_thread_safe() -> None:
     # Regression: resolve() used an unlocked check-then-build-then-cache,
     # so concurrent first resolves each invoked the factory.

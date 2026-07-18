@@ -34,7 +34,10 @@ class ProviderRegistry:
     def __init__(self) -> None:
         self._factories: Registry[Callable[..., Provider]] = Registry(kind="provider")
         self._instances: dict[str, Provider] = {}
-        self._lock = threading.Lock()
+        # RLock, not Lock: get_or_create() invokes provider factories while
+        # holding it, and a factory that itself consults the registry (same
+        # thread) must not deadlock.
+        self._lock = threading.RLock()
 
     def register_factory(
         self, name: str, factory: Callable[..., Provider], *, replace: bool = False

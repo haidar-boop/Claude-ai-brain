@@ -55,7 +55,10 @@ class Container:
         self._factories: dict[Key[object], Callable[[], object]] = {}
         self._singleton: dict[Key[object], bool] = {}
         self._instances: dict[Key[object], object] = {}
-        self._lock = threading.Lock()
+        # RLock, not Lock: resolve() invokes user factories while holding it,
+        # and a factory legitimately composing other registrations (nested
+        # resolve() on the same thread) must not deadlock.
+        self._lock = threading.RLock()
 
     def register(self, key: Key[T], factory: Callable[[], T], *, singleton: bool = True) -> None:
         """Register *factory* under *key*, replacing any prior registration."""
