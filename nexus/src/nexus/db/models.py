@@ -46,6 +46,7 @@ __all__ = [
     "Setting",
     "Tag",
     "Task",
+    "UtcDateTime",
     "VectorRecord",
     "WorkflowRule",
     "all_models",
@@ -91,11 +92,42 @@ def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
+class UtcDateTime(TypeDecorator[dt.datetime]):
+    """A timezone-aware datetime column that always round-trips as UTC.
+
+    SQLite has no timezone-aware datetime type: ``DateTime(timezone=True)``
+    silently reads values back *naive*, which then blows up the moment they
+    are compared with an aware datetime elsewhere in the app. This decorator
+    fixes that at the boundary -- every value is stored as naive-UTC and read
+    back as aware-UTC, so the entire application can assume "every datetime
+    from the database is aware and in UTC" and never mix naive with aware.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: dt.datetime | None, dialect: object) -> dt.datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            # A naive value is taken to already be UTC (that's the app's
+            # convention); an aware value is converted to UTC first.
+            return value
+        return value.astimezone(dt.UTC).replace(tzinfo=None)
+
+    def process_result_value(
+        self, value: dt.datetime | None, dialect: object
+    ) -> dt.datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=dt.UTC)
+
+
 class Base(DeclarativeBase):
     """Declarative base carrying shared type conventions."""
 
     type_annotation_map: ClassVar[dict[Any, Any]] = {
-        dt.datetime: DateTime(timezone=True),
+        dt.datetime: UtcDateTime,
     }
 
 

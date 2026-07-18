@@ -47,6 +47,16 @@ def test_handler_exception_does_not_break_others() -> None:
     assert delivered == ["t"]  # second handler still ran
 
 
+def test_payload_may_use_name_key() -> None:
+    # Regression: the publish() topic parameter must not shadow a "name"
+    # payload key, which many domain events legitimately carry.
+    bus = EventBus()
+    seen: list[Event] = []
+    bus.subscribe("project.created", seen.append)
+    bus.publish("project.created", project_id=1, name="Work")
+    assert seen[0].payload == {"project_id": 1, "name": "Work"}
+
+
 def test_clear_removes_all() -> None:
     bus = EventBus()
     seen: list[Event] = []

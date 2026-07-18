@@ -67,16 +67,22 @@ class EventBus:
 
         return unsubscribe
 
-    def publish(self, name: str, **payload: Any) -> Event:
-        """Build and dispatch an :class:`Event`, returning what was published."""
-        event = Event(name=name, payload=payload)
+    def publish(self, topic: str, **payload: Any) -> Event:
+        """Build and dispatch an :class:`Event`, returning what was published.
+
+        The event name is the positional *topic* argument (not ``name``) so
+        that ``name`` remains free as an ordinary payload key -- publishing
+        ``bus.publish("project.created", name="Work")`` must not collide with
+        the parameter that carries the topic.
+        """
+        event = Event(name=topic, payload=payload)
         with self._lock:
-            targets = [*self._handlers.get(name, ()), *self._wildcard]
+            targets = [*self._handlers.get(topic, ()), *self._wildcard]
         for handler in targets:
             try:
                 handler(event)
             except Exception:
-                _logger.exception("event handler failed for %s", name)
+                _logger.exception("event handler failed for %s", topic)
         return event
 
     def clear(self) -> None:
