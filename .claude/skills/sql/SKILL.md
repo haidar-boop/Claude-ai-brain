@@ -1,0 +1,88 @@
+---
+name: sql
+description: SQL query design, JOIN/window-function patterns, indexing strategy, query-plan debugging (EXPLAIN ANALYZE), performance, testing, and a code review checklist for safe parameterized data access across PostgreSQL/MySQL. Use this skill whenever the user is writing, reviewing, or optimizing SQL queries, database schemas, or migrations, or a query is running slow.
+---
+
+# SQL
+
+SQL query design, indexing strategy, and safe parameterized data access across PostgreSQL/MySQL
+(SQLAlchemy, Prisma, Knex, SQLite).
+
+## Coding patterns
+
+- Use INNER JOIN when a row must have a matching row in the other table; non-matching rows are dropped from both sides
+- Use LEFT JOIN when every row from the left table must survive regardless of a match, then filter on right-side columns `IS NULL` to find rows with no match
+- Use `EXISTS` (or `NOT EXISTS`) for semi-join and anti-join existence checks instead of JOIN + DISTINCT or COUNT(*), since it can short-circuit on the first match
+- Use `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)` to deduplicate rows or select the "top N per group" without a correlated subquery
+- Use `RANK()`/`DENSE_RANK()` instead of `ROW_NUMBER()` when tied rows should share the same rank rather than get an arbitrary distinct one
+- Use `LAG()`/`LEAD()` window functions to compare a row to the previous or next row in an ordered set without a self-join
+- Use CTEs (`WITH` clauses) to break a complex query into named, readable stages instead of nesting subqueries several levels deep
+- Use a recursive CTE (`WITH RECURSIVE`) to walk hierarchical or graph-shaped data, such as an org chart, category tree, or bill-of-materials explosion
+- Use `INSERT ... ON CONFLICT` (Postgres) or `ON DUPLICATE KEY UPDATE` (MySQL) for upsert logic instead of a separate SELECT-then-INSERT-or-UPDATE round trip
+- Prefer `UNION ALL` over `UNION` when duplicate rows across the combined result sets are impossible or acceptable, since `UNION` forces an extra sort/dedup pass
+
+## Best practices
+
+- Default to a B-tree index for equality and range lookups; reach for specialized index types (GIN, GiST, hash) only when the access pattern actually needs them
+- Order composite index columns by equality predicates first, then range predicates, then ORDER BY columns, following the leftmost-prefix rule so partial-column queries can still use the index
+- Use partial (Postgres) or filtered (SQL Server) indexes to index only the frequently-queried subset of a large table, such as `WHERE deleted_at IS NULL` or `WHERE status = 'active'`
+- Normalize to at least third normal form by default to avoid update anomalies; denormalize deliberately, and document why, only after profiling shows a real read-latency problem
+- Choose the isolation level deliberately: READ COMMITTED is a reasonable default for most OLTP workloads, while REPEATABLE READ or SERIALIZABLE is needed when invariants must hold under concurrent writes
+- Keep transactions short and touching as few rows and tables as possible to minimize lock contention and deadlock risk
+- Give every foreign key column an explicit index, since most databases don't create one automatically the way they do for the referenced primary key
+- Choose data types that match the domain, such as NUMERIC/DECIMAL for money instead of FLOAT, and native DATE/TIMESTAMP types instead of strings, so comparisons and indexes behave correctly
+- Manage schema changes with version-controlled migrations rather than hand-run DDL, so changes are repeatable, reviewable, and auditable
+- Enforce data integrity with database-level constraints (NOT NULL, UNIQUE, CHECK, FOREIGN KEY) rather than relying solely on application code
+
+## Debugging strategies
+
+- Run `EXPLAIN`, or `EXPLAIN ANALYZE` in Postgres/MySQL, to see the actual query plan and execution costs before assuming why a query is slow
+- Look for Seq Scan (Postgres) or `type: ALL` (MySQL's EXPLAIN) on large tables as a signal that a useful index is missing or not being chosen by the planner
+- Compare EXPLAIN ANALYZE's actual row counts against the planner's estimated row counts to catch stale statistics that are misleading the optimizer
+- Enable and review the slow query log (MySQL's slow_query_log, Postgres' log_min_duration_statement) to find real production offenders instead of guessing
+- Use `pg_stat_statements` (Postgres) to aggregate execution stats across calls and rank queries by total time, not just single-run duration
+- Check `pg_stat_activity` or `SHOW PROCESSLIST` (MySQL) to find currently blocked, long-running, or lock-contending queries in a live system
+- Add the BUFFERS option to `EXPLAIN ANALYZE` in Postgres to see actual disk-read versus cache-hit counts per plan node, not just estimated cost
+- Reproduce a slow query with the exact parameter values seen in production, since the chosen plan can differ across parameter values (parameter sniffing)
+
+## Performance and optimization
+
+- Build covering indexes that include every column a hot query selects, filters, and orders by, so the engine can satisfy it from the index alone (index-only scan) without touching the table
+- Avoid `SELECT *` in application queries and views; select only the columns actually needed to cut I/O and network transfer and to let covering indexes work
+- Batch writes with multi-row INSERT statements or bulk loaders (COPY, LOAD DATA INFILE) instead of issuing one INSERT/UPDATE per row in a loop
+- Eliminate N+1 query patterns by replacing per-row follow-up queries with a single JOIN or a batched `WHERE id IN (...)` query
+- Use materialized views to precompute expensive, frequently-read aggregations that don't need up-to-the-second freshness, refreshing them on a schedule or trigger
+- Prefer keyset pagination (`WHERE id > :last_id ORDER BY id LIMIT :n`) over OFFSET-based pagination for deep pages, since OFFSET forces the engine to scan and discard every skipped row
+- Run `ANALYZE` (or the engine's statistics update) after large data changes so the planner's row-count estimates stay accurate and it keeps choosing good plans
+- Avoid wrapping indexed columns in functions or arithmetic in WHERE clauses (e.g., `WHERE DATE(created_at) = ...`), which prevents the planner from using the index at all
+
+## Testing approach
+
+- Wrap each test in a transaction and roll it back afterward instead of truncating and reseeding tables between tests, so the suite stays isolated and fast
+- Seed realistic data volumes into the test/staging database rather than a handful of rows, since query plans and index usage change materially at scale
+- Run tests against a schema carrying the same indexes as production, not a bare unindexed copy, so a missing index is caught before deploy rather than after
+- Use a real database instance for integration tests (a dedicated test database, or Testcontainers spinning up Postgres/MySQL) instead of mocking the database layer
+- Generate varied, realistic fixture data with factory libraries (e.g., factory_boy, Faker-backed seeders) rather than a handful of hardcoded, copy-pasted rows
+- Assert on EXPLAIN output or query counts in CI for hot-path queries to catch a missing index or a reintroduced N+1 before it reaches production
+- Test migrations both forward and backward against production-like data to catch destructive or lossy schema changes before they ship
+- Add concurrency tests around transactional code paths to surface deadlocks and isolation-level bugs that only appear under simultaneous writes
+
+## Code review checklist
+
+- Flag string-concatenated or interpolated SQL built from user input; require parameterized queries or prepared statements everywhere user data reaches a query
+- Flag foreign key columns with no corresponding index, since joins, lookups, and cascading deletes/updates on them will force sequential scans
+- Flag queries against large or unbounded tables with no LIMIT or pagination, which can return unbounded result sets and exhaust application memory
+- Flag WHERE clauses that compare a column to a differently-typed literal (e.g., an indexed integer column compared to a quoted string), which forces implicit coercion and can silently defeat the index
+- Flag `SELECT *` in application code, views, and migrations; require an explicit column list so schema changes don't silently break or bloat callers
+- Flag per-row queries issued from a loop in application code (the N+1 pattern); require a single batched query or JOIN instead
+- Flag transactions that stay open across an external call (a network request, an API call, user think-time) instead of committing quickly and releasing locks
+- Flag columns whose invariants (non-null, uniqueness, valid range) are enforced only in application code with no matching database constraint
+- Flag OFFSET-based pagination on large or fast-growing tables; recommend keyset pagination since OFFSET's cost grows linearly with page depth
+- Flag destructive statements (DROP, TRUNCATE, DELETE/UPDATE without a WHERE clause) run outside a reviewed migration or without a transaction and backup safety net
+
+## Documentation style
+
+Document non-obvious queries with a header comment stating business intent and any tricky edge
+case, give CTEs descriptive names so a WITH chain reads top-to-bottom like a narrative, and record
+the reason for an index, constraint, or denormalization decision in the migration file that
+introduces it rather than in scattered inline comments.
