@@ -45,8 +45,26 @@ def _baseline(connection: Connection) -> None:
     Base.metadata.create_all(connection)
 
 
+def _file_search_index(connection: Connection) -> None:
+    """Create the FTS5 full-text index over indexed files.
+
+    ``file_fts`` is an external-content FTS5 table whose ``rowid`` mirrors
+    ``file_entries.id``, so a match yields the file entry directly. The Files
+    service keeps it in sync on index/remove; using ``content=''`` keeps it a
+    plain (non-content-linked) index that we populate explicitly, which is
+    simpler and more predictable than trigger-synced external content.
+    """
+    connection.execute(
+        text(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS file_fts "
+            "USING fts5(name, body, tokenize='porter unicode61')"
+        )
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "create baseline schema", _baseline),
+    Migration(2, "create file full-text search index", _file_search_index),
 ]
 
 
