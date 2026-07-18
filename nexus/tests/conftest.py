@@ -10,5 +10,24 @@ collection time, before pytest-qt or any test imports QtGui -- is what makes
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+
+import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+@pytest.fixture
+def app_ctx() -> Iterator[object]:
+    """An in-memory :class:`AppContext` with every service wired, per test.
+
+    Imported lazily inside the fixture so non-UI test modules that never
+    request it don't pay the import cost.
+    """
+    from nexus.app_context import AppContext
+
+    ctx = AppContext.in_memory()
+    try:
+        yield ctx
+    finally:
+        ctx.close()

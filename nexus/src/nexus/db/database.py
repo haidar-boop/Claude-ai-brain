@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nexus.core.config import DatabaseConfig
+from nexus.core.errors import DatabaseError
 from nexus.core.logging import get_logger
 from nexus.db.backup import BackupManager
 from nexus.db.crypto import FieldCipher
@@ -76,6 +77,8 @@ class Database:
         self._engine: Engine = create_engine(url, **engine_kwargs)
         event.listen(self._engine, "connect", _enable_sqlite_pragmas)
         self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
+
+        self._backup_manager = backup_manager
 
         # The cipher must be installed before any session touches an
         # encrypted column, and before migrations create the schema.
@@ -146,6 +149,19 @@ class Database:
             raise
         finally:
             session.close()
+
+    def backup(self) -> Path:
+        """Take an on-demand snapshot of the database; return its path.
+
+        Raises :class:`DatabaseError` for an in-memory database (nothing on
+        disk to copy) or when there is not yet a database file to snapshot.
+        """
+        if self._backup_manager is None:
+            raise DatabaseError("this database has no backup location configured")
+        path = self._backup_manager.create()
+        if path is None:
+            raise DatabaseError("there is no database file to back up yet")
+        return path
 
     def dispose(self) -> None:
         """Close all pooled connections (call at application shutdown)."""
