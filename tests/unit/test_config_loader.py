@@ -94,3 +94,28 @@ def test_config_path_env_var_is_used_when_project_path_not_passed(tmp_path: Path
     project.write_text('[engine]\ndefault_provider = "fake"\n')
     config = load_config(env={"AIFORGE_CONFIG": str(project)})
     assert config.engine.default_provider == "fake"
+
+
+def test_bare_string_fallback_order_raises_instead_of_exploding_into_chars(
+    tmp_path: Path,
+) -> None:
+    # Regression: tuple("anthropic") silently became ('a','n','t',...) --
+    # a natural TOML typo (missing array brackets) must be a clear error.
+    project = tmp_path / "aiforge.toml"
+    project.write_text('[routing]\nfallback_order = "anthropic"\n')
+    with pytest.raises(ConfigError, match="fallback_order must be an array"):
+        load_config(project_path=project, env={})
+
+
+def test_bare_string_skills_enabled_raises(tmp_path: Path) -> None:
+    project = tmp_path / "aiforge.toml"
+    project.write_text('[skills]\nenabled = "python"\n')
+    with pytest.raises(ConfigError, match="enabled must be an array"):
+        load_config(project_path=project, env={})
+
+
+def test_bare_string_skills_disabled_raises(tmp_path: Path) -> None:
+    project = tmp_path / "aiforge.toml"
+    project.write_text('[skills]\ndisabled = "rust"\n')
+    with pytest.raises(ConfigError, match="disabled must be an array"):
+        load_config(project_path=project, env={})

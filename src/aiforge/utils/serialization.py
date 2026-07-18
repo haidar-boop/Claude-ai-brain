@@ -3,10 +3,18 @@
 Falls back to the standard library's ``json`` module, so everything here
 works with zero third-party dependencies -- just slower. Install the ``fast``
 extra (``pip install aiforge[fast]``) to pull in orjson.
+
+The fallback also serializes ``datetime``/``date``/``time`` values (via
+``isoformat()``), matching orjson's native handling -- TOML parsing produces
+real date/datetime objects, so config containing one must serialize
+identically on both paths. Known remaining divergence: non-string dict keys,
+which stdlib ``json`` coerces to strings while orjson rejects by default;
+AIForge itself never serializes such payloads.
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 from typing import Any
 
@@ -20,12 +28,18 @@ __all__ = ["HAS_ORJSON", "dumps", "dumps_bytes", "loads"]
 HAS_ORJSON = _orjson_mod is not None
 
 
+def _json_default(value: Any) -> str:
+    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def dumps(obj: Any, *, sort_keys: bool = False) -> str:
     """Serialize *obj* to a compact JSON string."""
     if _orjson_mod is not None:
         option = _orjson_mod.OPT_SORT_KEYS if sort_keys else 0
         return _orjson_mod.dumps(obj, option=option).decode("utf-8")
-    return json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"))
+    return json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default)
 
 
 def dumps_bytes(obj: Any, *, sort_keys: bool = False) -> bytes:
@@ -33,7 +47,9 @@ def dumps_bytes(obj: Any, *, sort_keys: bool = False) -> bytes:
     if _orjson_mod is not None:
         option = _orjson_mod.OPT_SORT_KEYS if sort_keys else 0
         return _orjson_mod.dumps(obj, option=option)
-    return json.dumps(obj, sort_keys=sort_keys, separators=(",", ":")).encode("utf-8")
+    return json.dumps(
+        obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default
+    ).encode("utf-8")
 
 
 def loads(data: str | bytes) -> Any:

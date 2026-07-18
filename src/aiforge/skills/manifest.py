@@ -122,9 +122,24 @@ class SkillManifest:
             elif key in _STR_FIELDS:
                 kwargs[key] = str(value)
             elif key == "priority":
-                kwargs[key] = int(value)
+                # bool is an int subclass -- reject it explicitly, and reject
+                # strings rather than int()-coercing, so `priority = "high"`
+                # raises SkillValidationError instead of a raw ValueError.
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise SkillValidationError(
+                        f"field 'priority' must be an integer, got {type(value).__name__}",
+                        source=source,
+                    )
+                kwargs[key] = value
             elif key == "enabled":
-                kwargs[key] = bool(value)
+                # bool(value) would silently turn the string "false" into
+                # True; require a real TOML boolean instead.
+                if not isinstance(value, bool):
+                    raise SkillValidationError(
+                        f"field 'enabled' must be a boolean, got {type(value).__name__}",
+                        source=source,
+                    )
+                kwargs[key] = value
             else:
                 raise SkillValidationError(f"unknown field {key!r}", source=source)
         try:

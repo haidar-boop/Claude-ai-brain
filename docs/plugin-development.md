@@ -491,6 +491,9 @@ class ProviderRateLimitError(ProviderError):
 class ProviderTimeoutError(ProviderError):
     """Raised when a provider request exceeds its configured timeout."""
 
+class ProviderConnectionError(ProviderError):
+    """Raised when a provider is unreachable (DNS failure, connection reset, proxy outage)."""
+
 class ProviderResponseError(ProviderError):
     """Raised when a provider returns an unexpected or invalid response."""
 ```
@@ -523,10 +526,22 @@ def _translate_error(self, exc: Exception) -> Exception:
         return ProviderRateLimitError(str(exc), retry_after=_parse_retry_after(exc))
     if isinstance(exc, anthropic.APITimeoutError):
         return ProviderTimeoutError(str(exc))
+    if isinstance(exc, anthropic.APIConnectionError):
+        return ProviderConnectionError(str(exc))
     if isinstance(exc, anthropic.APIStatusError):
+        return ProviderResponseError(str(exc))
+    if isinstance(exc, anthropic.APIError):
         return ProviderResponseError(str(exc))
     return exc
 ```
+
+Two details worth copying: narrow exception types are tested before their
+bases (in the real SDK `APITimeoutError` subclasses `APIConnectionError`, and
+`AuthenticationError`/`RateLimitError` subclass `APIStatusError`), and the
+trailing SDK-base-class catch-all (`anthropic.APIError`) guarantees no SDK
+exception ever escapes untranslated — without it, an unanticipated SDK error
+type would silently bypass the router's fallback entirely (see the table
+below).
 
 `AnthropicProvider` also logs the request/outcome around this via
 `aiforge.providers.logging.log_request_start` / `log_response` / `log_request_error` — debug-level
@@ -537,11 +552,12 @@ like the rest of AIForge's; it's optional, not part of the `Provider` contract.
 
 `ProviderRouter.call()` only knows how to react correctly to *AIForge's* exception types — not your
 backend's (routing and fallback selection themselves are covered in full in
-[`providers.md`](providers.md) §5). It declares exactly two exception types as transient:
+[`providers.md`](providers.md) §5). It declares three exception types as transient:
 
 ```python
 # src/aiforge/providers/router.py
 _TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    ProviderConnectionError,
     ProviderRateLimitError,
     ProviderTimeoutError,
 )
@@ -552,19 +568,19 @@ into:
 
 | What your provider raises | Router behavior |
 | --- | --- |
-| `ProviderRateLimitError` / `ProviderTimeoutError` | retried against the *same* candidate up to `max_attempts` times (exponential backoff + jitter via `retry_with_backoff`); falls back to the next candidate only if retries are exhausted |
+| `ProviderConnectionError` / `ProviderRateLimitError` / `ProviderTimeoutError` | retried against the *same* candidate up to `max_attempts` times (exponential backoff + jitter via `retry_with_backoff`); falls back to the next candidate only if retries are exhausted |
 | any other `ProviderError` (`ProviderAuthError`, `ProviderResponseError`, ...) | not retried — the router moves immediately to the next candidate in `fallback_order` |
 | anything that is **not** a `ProviderError` (an untranslated SDK exception, a bare `ValueError`, ...) | not caught by the router at all — propagates straight out of `ProviderRouter.call()`, aborting the whole request with no retry and no fallback to any remaining candidate |
 
 That third row is the one that bites silently: `retry_with_backoff`'s `except tuple(retry_on):`
-only matches the transient pair, and `router.call()`'s own `except ProviderError` only matches
+only matches the transient set, and `router.call()`'s own `except ProviderError` only matches
 `ProviderError` subclasses — so an exception that is neither simply skips both catch clauses and
 exits the whole call chain immediately. A provider that forgets to translate, say, a raw
 connection-reset error means one flaky network blip takes down a request that a correctly
-configured `fallback_order` should have quietly recovered from. Only `ProviderRateLimitError` and
-`ProviderTimeoutError` get retried before falling back — everything else you translate still
-participates in fallback, just without wasted retries against a candidate that's never going to
-succeed on retry (wrong credentials, malformed response).
+configured `fallback_order` should have quietly recovered from. Only the three transient types
+get retried before falling back — everything else you translate still participates in fallback,
+just without wasted retries against a candidate that's never going to succeed on retry (wrong
+credentials, malformed response).
 
 If your backend's own SDK doesn't already retry transient failures internally (the `anthropic`
 package does, via its client's own `max_retries`/`timeout`), you can reuse AIForge's backoff
@@ -597,8 +613,9 @@ the router's cross-provider fallback remains the outer safety net.
   importing your module (e.g. while `aiforge providers list` enumerates registrations) never
   requires the SDK to be installed. See `AnthropicProvider.__init__`.
 - Every backend exception you can reasonably anticipate is translated to `ProviderAuthError` /
-  `ProviderRateLimitError` / `ProviderTimeoutError` / `ProviderResponseError` via
-  `raise translated from exc`.
+  `ProviderRateLimitError` / `ProviderTimeoutError` / `ProviderConnectionError` /
+  `ProviderResponseError` via `raise translated from exc`, with a base-SDK-exception catch-all so
+  nothing escapes untranslated.
 - Registered via `register_factory` (in-process) or
   `[project.entry-points."aiforge.providers"]` (installable package) — pick one per use case, both
   work simultaneously across a codebase.

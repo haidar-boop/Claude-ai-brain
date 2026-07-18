@@ -130,3 +130,39 @@ def test_configure_seeds_cache_for_subsequent_require() -> None:
     registry.register_factory("fake", FakeProvider)
     configured = registry.configure("fake", model="configured-model")
     assert registry.require("fake") is configured
+
+
+def test_get_or_create_returns_one_shared_instance_under_concurrency() -> None:
+    # Regression: the instance cache used an unlocked check-then-build-then-
+    # write, so concurrent first calls each built their own instance.
+    import threading
+    import time
+
+    construction_count = 0
+
+    def slow_factory() -> FakeProvider:
+        nonlocal construction_count
+        construction_count += 1
+        time.sleep(0.05)
+        return FakeProvider(model="slow-model")
+
+    registry = ProviderRegistry()
+    registry.register_factory("slow", slow_factory)
+    barrier = threading.Barrier(8)
+    results: list[FakeProvider] = []
+    results_lock = threading.Lock()
+
+    def worker() -> None:
+        barrier.wait()
+        instance = registry.get_or_create("slow")
+        with results_lock:
+            results.append(instance)  # type: ignore[arg-type]
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert construction_count == 1
+    assert all(r is results[0] for r in results)

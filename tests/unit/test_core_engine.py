@@ -199,6 +199,20 @@ def test_from_config_default_max_tokens_from_provider_config() -> None:
     assert result.response.text == "8192"
 
 
+def test_run_explicit_max_tokens_zero_is_not_replaced_by_default() -> None:
+    # Regression: `request.max_tokens or default` treated an explicit 0 as
+    # unset. 0 must reach the provider so the backend rejects it loudly.
+    registry = ProviderRegistry()
+    registry.register_factory(
+        "probe", lambda: FakeProvider(model="m", respond_fn=lambda req: str(req.max_tokens))
+    )
+    router = ProviderRouter(registry, default_provider="probe")
+    engine = Engine(router=router, skill_resolver=SkillResolver(SkillRegistry()))
+    assert engine.run(TaskRequest(prompt="x", max_tokens=0)).response.text == "0"
+    assert engine.run(TaskRequest(prompt="x", max_tokens=None)).response.text == "4096"
+    assert engine.run(TaskRequest(prompt="x", max_tokens=1)).response.text == "1"
+
+
 def test_from_config_ignores_provider_config_for_unregistered_provider_name() -> None:
     # Config referencing a provider that isn't installed/registered must not
     # raise -- there's simply nothing to configure.

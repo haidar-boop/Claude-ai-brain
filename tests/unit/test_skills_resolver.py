@@ -100,3 +100,25 @@ def test_resolve_explicit_skips_disabled_without_raising(registry: SkillRegistry
     resolver = SkillResolver(registry)
     result = resolver.resolve(explicit=("python",))
     assert result.selected == ()
+
+
+def test_resolve_explicit_deduplicates_repeated_names(registry: SkillRegistry) -> None:
+    # Regression: a repeated explicit name crowded out a distinct requested
+    # skill after the max_skills slice and duplicated its guidance text.
+    resolver = SkillResolver(registry, max_skills=2)
+    result = resolver.resolve(explicit=("python", "python", "typescript"))
+    assert [m.name for m in result.selected] == ["python", "typescript"]
+    assert result.composed_guidance is not None
+    assert result.composed_guidance.count("## python skill") == 1
+
+
+def test_resolve_scores_skill_name_token_match() -> None:
+    # Regression: the registry indexes a skill's name as a matchable token,
+    # but _score() never awarded points for it -- so a skill whose name isn't
+    # duplicated in languages/keywords (like builtin "htmlcss") was found as
+    # a candidate yet always scored 0 and got silently dropped.
+    reg = SkillRegistry()
+    reg.register(_manifest("htmlcss", languages=("html", "css"), keywords=("flexbox",)))
+    resolver = SkillResolver(reg)
+    result = resolver.resolve(prompt="please use the htmlcss skill for this task")
+    assert [m.name for m in result.selected] == ["htmlcss"]

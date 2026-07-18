@@ -351,11 +351,13 @@ exc`, so the original SDK exception is always chained as the cause):
 | `anthropic.AuthenticationError` | `ProviderAuthError` | missing/invalid credentials |
 | `anthropic.RateLimitError` | `ProviderRateLimitError` | `retry_after` (float seconds) parsed from the response's `retry-after` header via `_parse_retry_after`; `None` if the header is missing or unparseable |
 | `anthropic.APITimeoutError` | `ProviderTimeoutError` | request exceeded the client's `timeout` |
+| `anthropic.APIConnectionError` | `ProviderConnectionError` | network unreachable: DNS failure, connection reset, proxy outage (checked after `APITimeoutError`, its narrower subclass) |
 | `anthropic.APIStatusError` | `ProviderResponseError` | any other non-2xx SDK status error |
-| anything else | left unchanged | re-raised as its original type |
+| `anthropic.APIError` (anything else from the SDK) | `ProviderResponseError` | catch-all: no SDK exception ever escapes untranslated, so `except AIForgeError` around a call always works |
+| a non-SDK exception | left unchanged | re-raised as its original type |
 
-`ProviderRateLimitError` and `ProviderTimeoutError` are the two error types
-`ProviderRouter` treats as transient and retries — see §5.
+`ProviderConnectionError`, `ProviderRateLimitError`, and `ProviderTimeoutError`
+are the error types `ProviderRouter` treats as transient and retries — see §5.
 
 ## 4. Cost tracking
 
@@ -458,12 +460,12 @@ candidate chain — the selected provider first, then every entry in
 in turn:
 
 ```python
-_TRANSIENT_ERRORS = (ProviderRateLimitError, ProviderTimeoutError)
+_TRANSIENT_ERRORS = (ProviderConnectionError, ProviderRateLimitError, ProviderTimeoutError)
 ```
 
 For each candidate, the request is retried against **that same provider**
 up to `max_attempts` times (exponential backoff + jitter, via
-`retry_with_backoff`) but only for the two transient error types above. Any
+`retry_with_backoff`) but only for the transient error types above. Any
 `ProviderError` — whether it's a non-transient error like
 `ProviderAuthError`/`ProviderResponseError` (raised immediately, no retry)
 or a transient error that exhausted its retries — causes the router to move

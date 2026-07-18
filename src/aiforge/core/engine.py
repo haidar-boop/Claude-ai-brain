@@ -156,10 +156,13 @@ class Engine:
         system = _compose_system(self.base_system, request.system, resolved.composed_guidance)
 
         def build_request(model: str) -> ChatRequest:
+            max_tokens = (
+                request.max_tokens if request.max_tokens is not None else self.default_max_tokens
+            )
             return ChatRequest(
                 messages=(Message(role=Role.USER, content=request.prompt),),
                 model=model,
-                max_tokens=request.max_tokens or self.default_max_tokens,
+                max_tokens=max_tokens,
                 system=system,
                 stream=request.stream,
             )

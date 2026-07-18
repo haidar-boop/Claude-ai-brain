@@ -79,3 +79,20 @@ def test_run_endpoint_unknown_provider_returns_502(server_url: str) -> None:
 def test_run_endpoint_wrong_method_path_returns_404(server_url: str) -> None:
     status, _ = _post(f"{server_url}/health", {"prompt": "hi"})
     assert status == 404
+
+
+def test_run_endpoint_explicit_null_skills_behaves_like_omitted(server_url: str) -> None:
+    # Regression: {"skills": null} raised TypeError -> confusing 400, while
+    # every sibling optional field tolerated an explicit JSON null.
+    status, body = _post(f"{server_url}/run", {"prompt": "hi", "provider": "fake", "skills": None})
+    assert status == 200
+    assert "hi" in body["text"]
+
+
+def test_handler_sets_socket_timeout() -> None:
+    # Regression: no timeout meant a stalled client (Content-Length declared,
+    # body never sent) pinned its worker thread forever.
+    from aiforge.server.app import _make_handler
+
+    handler_cls = _make_handler(forge=None)  # type: ignore[arg-type]
+    assert handler_cls.timeout == 30

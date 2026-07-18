@@ -18,6 +18,7 @@ from typing import Any
 
 from aiforge.core.errors import (
     ProviderAuthError,
+    ProviderConnectionError,
     ProviderRateLimitError,
     ProviderResponseError,
     ProviderTimeoutError,
@@ -158,6 +159,12 @@ class AnthropicProvider(BaseProvider):
         )
 
     def _translate_error(self, exc: Exception) -> Exception:
+        # Check order matters: in the real SDK, AuthenticationError and
+        # RateLimitError are APIStatusError subclasses, and APITimeoutError is
+        # an APIConnectionError subclass -- narrow types must be tested before
+        # their bases. The trailing APIError catch-all guarantees no SDK
+        # exception ever escapes untranslated, which ProviderRouter's
+        # retry/fallback (and callers' `except AIForgeError`) depend on.
         anthropic = self._anthropic
         if isinstance(exc, anthropic.AuthenticationError):
             return ProviderAuthError(str(exc))
@@ -165,7 +172,11 @@ class AnthropicProvider(BaseProvider):
             return ProviderRateLimitError(str(exc), retry_after=_parse_retry_after(exc))
         if isinstance(exc, anthropic.APITimeoutError):
             return ProviderTimeoutError(str(exc))
+        if isinstance(exc, anthropic.APIConnectionError):
+            return ProviderConnectionError(str(exc))
         if isinstance(exc, anthropic.APIStatusError):
+            return ProviderResponseError(str(exc))
+        if isinstance(exc, anthropic.APIError):
             return ProviderResponseError(str(exc))
         return exc
 

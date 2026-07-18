@@ -269,9 +269,9 @@ collisions between unrelated registrations aren't possible.
      `ProviderNotFoundError`, remember it as `last_error` and try the next candidate);
      `effective_model = model_override or candidate.model`; build the request; call
      `candidate.complete()` wrapped in `retry_with_backoff()`, which retries only
-     `ProviderRateLimitError`/`ProviderTimeoutError` (`_TRANSIENT_ERRORS`), up to `max_attempts`
-     times, with exponential backoff (`base_delay * 2**attempt`, capped at 30s) plus up to 25%
-     jitter.
+     `ProviderConnectionError`/`ProviderRateLimitError`/`ProviderTimeoutError`
+     (`_TRANSIENT_ERRORS`), up to `max_attempts` times, with exponential backoff
+     (`base_delay * 2**attempt`, capped at 30s) plus up to 25% jitter.
    - Any other `ProviderError`, or exhausting retries, moves to the next candidate in the chain;
      the first candidate to succeed returns immediately. If the whole chain fails, the last error
      seen is re-raised.
@@ -324,6 +324,7 @@ AIForgeError
 │   ├── ProviderAuthError
 │   ├── ProviderRateLimitError   (carries retry_after: float | None)
 │   ├── ProviderTimeoutError
+│   ├── ProviderConnectionError
 │   └── ProviderResponseError
 └── SkillError
     ├── SkillNotFoundError       (also RegistryError)

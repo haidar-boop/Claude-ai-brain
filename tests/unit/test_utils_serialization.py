@@ -32,3 +32,35 @@ def test_has_orjson_flag_matches_import() -> None:
     except ImportError:
         expected = False
     assert serialization.HAS_ORJSON is expected
+
+
+def test_dumps_serializes_dates_on_both_paths() -> None:
+    # Regression: TOML parsing produces real date/datetime objects (e.g. in
+    # provider `extra` config); the orjson path serialized them natively
+    # while the stdlib fallback raised TypeError, so `aiforge config show`
+    # crashed only for installs without the `fast` extra. Both paths must
+    # produce isoformat strings.
+    import datetime
+
+    obj = {
+        "released": datetime.date(2024, 1, 1),
+        "at": datetime.datetime(2024, 1, 1, 12, 30, 0),
+        "t": datetime.time(12, 30, 0),
+    }
+    parsed = serialization.loads(serialization.dumps(obj))
+    assert parsed["released"] == "2024-01-01"
+    assert parsed["at"].startswith("2024-01-01T12:30:00")
+    assert parsed["t"].startswith("12:30:00")
+
+
+def test_stdlib_fallback_json_default_matches_orjson_for_dates() -> None:
+    # Exercise the fallback helper directly so this is covered even when
+    # orjson is installed and dumps() takes the accelerated path.
+    import datetime
+
+    assert serialization._json_default(datetime.date(2024, 1, 1)) == "2024-01-01"
+    try:
+        serialization._json_default(object())
+        raise AssertionError("expected TypeError")
+    except TypeError:
+        pass

@@ -61,8 +61,10 @@ strict:
   `patterns`, `best_practices`, `debugging`, `optimization`, `testing`, `review_rules`, `requires`)
   must be TOML arrays — `languages = "python"` (a bare string) raises `SkillValidationError`
   rather than being auto-wrapped into a one-element tuple.
-- `priority` is coerced with `int(...)`, `enabled` with `bool(...)`; `name`, `description`, and
-  `documentation_style` are coerced with `str(...)`.
+- `priority` must be a real TOML integer and `enabled` a real TOML boolean — a quoted string like
+  `enabled = "false"` or `priority = "high"` raises `SkillValidationError` rather than being
+  coerced (`bool("false")` is `True`, so silent coercion would invert the author's intent).
+  `name`, `description`, and `documentation_style` are coerced with `str(...)`.
 - Invalid TOML syntax and unreadable files also raise `SkillValidationError` (wrapping the
   underlying `tomllib.TOMLDecodeError` / `OSError`), so every manifest-loading failure surfaces as
   the same exception type.
@@ -188,6 +190,8 @@ With no explicit names, `_score_and_select` runs:
    ) -> int:
        token_set = {t.lower() for t in tokens}
        score = 0
+       if manifest.name.lower() in token_set:
+           score += 3
        score += 3 * len(token_set & {v.lower() for v in manifest.languages})
        score += 2 * len(token_set & {v.lower() for v in manifest.frameworks})
        score += 2 * len(token_set & {v.lower() for v in manifest.libraries})
@@ -198,7 +202,10 @@ With no explicit names, `_score_and_select` runs:
    ```
 
    Matching is case-insensitive but whole-token (both sides are lowercased before intersecting),
-   not substring or prefix matching. Only candidates scoring `> 0` survive.
+   not substring or prefix matching. Only candidates scoring `> 0` survive. The name-match bonus
+   exists because the registry indexes a skill's own `name` as a matchable token — a prompt that
+   names the skill directly (e.g. "use the htmlcss skill") must score, even for a skill whose
+   name isn't duplicated in its `languages`/`keywords`.
 4. **Sort and truncate.** `scored.sort(key=lambda pair: (-pair[0], -pair[1].priority,
    pair[1].name))` — highest score wins; `priority` breaks score ties (higher wins); `name` breaks
    any remaining tie alphabetically. The top `max_skills` survive.
@@ -502,9 +509,10 @@ Config layers the same way everywhere in AIForge: `src/aiforge/config/defaults.t
 `aiforge.toml` < `AIFORGE__SECTION__KEY` environment variables. One caveat specific to `[skills]`:
 the environment-override coercer (`_coerce_env_value` in `src/aiforge/config/loader.py`) only
 turns a raw string into `bool`/`int`/`float`, falling back to the string itself — it does **not**
-split on commas into a list. `AIFORGE__SKILLS__DISABLED=rust` does not disable the `rust` skill; it
-sets `disabled` to `tuple("rust")`, i.e. `('r', 'u', 's', 't')`, none of which match a real skill
-name. Set `enabled`/`disabled`/`extra_dirs` in `aiforge.toml`, not through the environment.
+split on commas into a list. `AIFORGE__SKILLS__DISABLED=rust` therefore does not disable the
+`rust` skill; the loader rejects the bare string with a `ConfigError` ("must be an array of
+strings") rather than accepting a value that can't mean what was intended. Set
+`enabled`/`disabled`/`extra_dirs` in `aiforge.toml`, not through the environment.
 
 ## Checklist
 

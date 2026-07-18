@@ -6,11 +6,13 @@ import json
 import logging
 import os
 import sys
+import threading
 from typing import Any
 
 __all__ = ["configure", "get_logger", "redact"]
 
 _CONFIGURED = False
+_CONFIGURE_LOCK = threading.Lock()
 _REDACT_KEYS = frozenset(
     {
         "api_key",
@@ -41,18 +43,28 @@ class _StructuredFormatter(logging.Formatter):
 
 
 def configure(level: str | int | None = None) -> None:
-    """Configure the ``aiforge`` logger tree once; safe to call repeatedly."""
+    """Configure the ``aiforge`` logger tree once; safe to call repeatedly.
+
+    Thread-safe: the double-checked lock prevents concurrent first callers
+    from each attaching their own handler (which would duplicate every
+    subsequent log record).
+    """
     global _CONFIGURED
     if _CONFIGURED:
         return
-    resolved_level = level if level is not None else os.environ.get("AIFORGE_LOG_LEVEL", "WARNING")
-    handler = logging.StreamHandler(stream=sys.stderr)
-    handler.setFormatter(_StructuredFormatter())
-    root = logging.getLogger("aiforge")
-    root.addHandler(handler)
-    root.setLevel(resolved_level)
-    root.propagate = False
-    _CONFIGURED = True
+    with _CONFIGURE_LOCK:
+        if _CONFIGURED:
+            return
+        resolved_level = (
+            level if level is not None else os.environ.get("AIFORGE_LOG_LEVEL", "WARNING")
+        )
+        handler = logging.StreamHandler(stream=sys.stderr)
+        handler.setFormatter(_StructuredFormatter())
+        root = logging.getLogger("aiforge")
+        root.addHandler(handler)
+        root.setLevel(resolved_level)
+        root.propagate = False
+        _CONFIGURED = True
 
 
 def get_logger(name: str) -> logging.Logger:

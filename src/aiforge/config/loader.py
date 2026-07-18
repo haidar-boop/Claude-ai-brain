@@ -116,6 +116,21 @@ def _coerce_env_value(value: str) -> Any:
     return value
 
 
+def _string_list(data: dict[str, Any], field: str, section: str) -> tuple[str, ...]:
+    """Read a list-of-strings config field, rejecting a bare string.
+
+    ``tuple("anthropic")`` silently explodes into a tuple of characters, so
+    a natural TOML typo like ``fallback_order = "anthropic"`` (missing
+    brackets) must raise a clear :class:`ConfigError` instead.
+    """
+    value = data.get(field, ())
+    if isinstance(value, str) or not isinstance(value, (list, tuple)):
+        raise ConfigError(
+            f"[{section}] {field} must be an array of strings, got {type(value).__name__}"
+        )
+    return tuple(value)
+
+
 def _to_config(data: dict[str, Any]) -> AIForgeConfig:
     try:
         engine = EngineConfig(**data.get("engine", {}))
@@ -123,15 +138,21 @@ def _to_config(data: dict[str, Any]) -> AIForgeConfig:
         routing_data = data.get("routing", {})
         routing = RoutingConfig(
             rules=tuple(RoutingRuleConfig(**rule) for rule in routing_data.get("rules", [])),
-            fallback_order=tuple(routing_data.get("fallback_order", ())),
+            fallback_order=_string_list(routing_data, "fallback_order", "routing"),
             max_attempts=routing_data.get("max_attempts", 2),
         )
         skills_data = data.get("skills", {})
         skills_enabled = skills_data.get("enabled")
+        if skills_enabled is not None and (
+            isinstance(skills_enabled, str) or not isinstance(skills_enabled, (list, tuple))
+        ):
+            raise ConfigError(
+                f"[skills] enabled must be an array of strings, got {type(skills_enabled).__name__}"
+            )
         skills = SkillsConfig(
             enabled=tuple(skills_enabled) if skills_enabled is not None else None,
-            disabled=tuple(skills_data.get("disabled", ())),
-            extra_dirs=tuple(skills_data.get("extra_dirs", ())),
+            disabled=_string_list(skills_data, "disabled", "skills"),
+            extra_dirs=_string_list(skills_data, "extra_dirs", "skills"),
         )
     except (TypeError, AttributeError) as exc:
         raise ConfigError(f"invalid configuration: {exc}") from exc

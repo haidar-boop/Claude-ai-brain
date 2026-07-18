@@ -16,6 +16,7 @@ __all__ = [
     "ConfigValidationError",
     "EngineError",
     "ProviderAuthError",
+    "ProviderConnectionError",
     "ProviderError",
     "ProviderNotFoundError",
     "ProviderRateLimitError",
@@ -79,6 +80,10 @@ class ProviderRateLimitError(ProviderError):
 
 class ProviderTimeoutError(ProviderError):
     """Raised when a provider request exceeds its configured timeout."""
+
+
+class ProviderConnectionError(ProviderError):
+    """Raised when a provider is unreachable (DNS failure, connection reset, proxy outage)."""
 
 
 class ProviderResponseError(ProviderError):

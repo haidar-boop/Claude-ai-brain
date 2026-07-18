@@ -18,6 +18,7 @@ type on the calling method's signature.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
@@ -43,36 +44,46 @@ class Key(Generic[T]):
 
 
 class Container:
-    """Registers factories keyed by :class:`Key` and resolves them, caching singletons."""
+    """Registers factories keyed by :class:`Key` and resolves them, caching singletons.
+
+    Thread-safe: singleton resolution is guarded by a lock so concurrent
+    first-use :meth:`resolve` calls for the same key share one built
+    instance, as ``singleton=True`` promises.
+    """
 
     def __init__(self) -> None:
         self._factories: dict[Key[object], Callable[[], object]] = {}
         self._singleton: dict[Key[object], bool] = {}
         self._instances: dict[Key[object], object] = {}
+        self._lock = threading.Lock()
 
     def register(self, key: Key[T], factory: Callable[[], T], *, singleton: bool = True) -> None:
         """Register *factory* under *key*, replacing any prior registration."""
-        self._factories[key] = factory  # type: ignore[index]
-        self._singleton[key] = singleton  # type: ignore[index]
-        self._instances.pop(key, None)  # type: ignore[arg-type]
+        with self._lock:
+            self._factories[key] = factory  # type: ignore[index]
+            self._singleton[key] = singleton  # type: ignore[index]
+            self._instances.pop(key, None)  # type: ignore[arg-type]
 
     def register_instance(self, key: Key[T], instance: T) -> None:
         """Register a pre-built *instance* directly under *key* (always a singleton)."""
-        self.register(key, lambda: instance, singleton=True)
-        self._instances[key] = instance  # type: ignore[index]
+        with self._lock:
+            self._factories[key] = lambda: instance  # type: ignore[index]
+            self._singleton[key] = True  # type: ignore[index]
+            self._instances[key] = instance  # type: ignore[index]
 
     def resolve(self, key: Key[T]) -> T:
         """Return the instance registered under *key*, building it on first use."""
-        if key in self._instances:
-            return self._instances[key]  # type: ignore[index, return-value]
-        try:
-            factory = self._factories[key]  # type: ignore[index]
-        except KeyError:
-            raise KeyError(f"no factory registered for {key!r}") from None
-        instance = factory()
-        if self._singleton.get(key, True):  # type: ignore[arg-type]
-            self._instances[key] = instance  # type: ignore[index]
-        return instance  # type: ignore[return-value]
+        with self._lock:
+            if key in self._instances:
+                return self._instances[key]  # type: ignore[index, return-value]
+            try:
+                factory = self._factories[key]  # type: ignore[index]
+            except KeyError:
+                raise KeyError(f"no factory registered for {key!r}") from None
+            instance = factory()
+            if self._singleton.get(key, True):  # type: ignore[arg-type]
+                self._instances[key] = instance  # type: ignore[index]
+            return instance  # type: ignore[return-value]
 
     def has(self, key: Key[object]) -> bool:
         """Return whether *key* has a registered factory."""
@@ -83,7 +94,8 @@ class Container:
 
         With no argument, clears every cached instance.
         """
-        if key is None:
-            self._instances.clear()
-        else:
-            self._instances.pop(key, None)
+        with self._lock:
+            if key is None:
+                self._instances.clear()
+            else:
+                self._instances.pop(key, None)

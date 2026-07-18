@@ -46,7 +46,7 @@ class SkillResolver:
     ) -> ResolvedSkills:
         """Resolve the skills applicable to a task."""
         if explicit:
-            requested = [self._registry.require(name) for name in explicit]
+            requested = [self._registry.require(name) for name in dict.fromkeys(explicit)]
             selected = [m for m in requested if m.enabled][: self.max_skills]
         else:
             selected = self._score_and_select(prompt=prompt, file_hints=file_hints)
@@ -74,6 +74,12 @@ class SkillResolver:
     ) -> int:
         token_set = {t.lower() for t in tokens}
         score = 0
+        # The registry indexes the skill's own name as a matchable token, so
+        # a prompt naming the skill directly must also *score* -- otherwise a
+        # skill whose name isn't duplicated in languages/keywords (e.g.
+        # "htmlcss") is found as a candidate but dropped at the score>0 gate.
+        if manifest.name.lower() in token_set:
+            score += 3
         score += 3 * len(token_set & {v.lower() for v in manifest.languages})
         score += 2 * len(token_set & {v.lower() for v in manifest.frameworks})
         score += 2 * len(token_set & {v.lower() for v in manifest.libraries})

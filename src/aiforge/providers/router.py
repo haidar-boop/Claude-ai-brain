@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from aiforge.core.errors import (
+    ProviderConnectionError,
     ProviderError,
     ProviderNotFoundError,
     ProviderRateLimitError,
@@ -27,6 +28,7 @@ from aiforge.providers.types import ChatRequest, ChatResponse
 __all__ = ["ProviderRouter", "RoutedResponse", "RoutingRule"]
 
 _TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    ProviderConnectionError,
     ProviderRateLimitError,
     ProviderTimeoutError,
 )

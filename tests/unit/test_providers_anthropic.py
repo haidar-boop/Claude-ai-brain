@@ -14,7 +14,14 @@ from typing import Any
 
 import pytest
 
-from aiforge.core.errors import ProviderAuthError, ProviderRateLimitError, ProviderTimeoutError
+from aiforge.core.errors import (
+    AIForgeError,
+    ProviderAuthError,
+    ProviderConnectionError,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from aiforge.providers.types import ChatRequest, Message, Role
 
 
@@ -137,24 +144,37 @@ class _FakeAsyncClient:
 def _make_fake_anthropic_module(*, raise_error: Exception | None = None) -> types.ModuleType:
     module = types.ModuleType("anthropic")
 
-    class AuthenticationError(Exception):
+    # Mirrors the real SDK's exception MRO (verified against anthropic
+    # 0.117.0): AuthenticationError and RateLimitError are APIStatusError
+    # subclasses, APITimeoutError is an APIConnectionError subclass, and
+    # everything descends from APIError. A flat hierarchy here would let
+    # _translate_error's isinstance ordering rot undetected.
+    class APIError(Exception):
         pass
 
-    class RateLimitError(Exception):
+    class APIStatusError(APIError):
+        pass
+
+    class APIConnectionError(APIError):
+        pass
+
+    class AuthenticationError(APIStatusError):
+        pass
+
+    class RateLimitError(APIStatusError):
         def __init__(self, message: str) -> None:
             super().__init__(message)
             self.response = types.SimpleNamespace(headers={"retry-after": "5"})
 
-    class APITimeoutError(Exception):
+    class APITimeoutError(APIConnectionError):
         pass
 
-    class APIStatusError(Exception):
-        pass
-
+    module.APIError = APIError  # type: ignore[attr-defined]
+    module.APIStatusError = APIStatusError  # type: ignore[attr-defined]
+    module.APIConnectionError = APIConnectionError  # type: ignore[attr-defined]
     module.AuthenticationError = AuthenticationError  # type: ignore[attr-defined]
     module.RateLimitError = RateLimitError  # type: ignore[attr-defined]
     module.APITimeoutError = APITimeoutError  # type: ignore[attr-defined]
-    module.APIStatusError = APIStatusError  # type: ignore[attr-defined]
     module.Anthropic = lambda **kw: _FakeClient(raise_error=raise_error, **kw)  # type: ignore[attr-defined]
     module.AsyncAnthropic = lambda **kw: _FakeAsyncClient(raise_error=raise_error, **kw)  # type: ignore[attr-defined]
     return module
@@ -271,6 +291,41 @@ def test_timeout_error_is_translated(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = _provider_with_error(monkeypatch, "APITimeoutError", "timed out")
     with pytest.raises(ProviderTimeoutError):
         provider.complete(_request())
+
+
+def test_connection_error_is_translated_to_provider_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A non-timeout network failure (DNS, connection reset) must become a
+    # ProviderConnectionError -- previously it leaked as the raw SDK
+    # exception, silently bypassing the router's retry AND fallback.
+    provider = _provider_with_error(monkeypatch, "APIConnectionError", "connection reset")
+    with pytest.raises(ProviderConnectionError):
+        provider.complete(_request())
+
+
+def test_unknown_api_error_is_translated_to_provider_response_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The APIError catch-all: no SDK error type may escape untranslated,
+    # so `except AIForgeError` around engine.run() always works.
+    provider = _provider_with_error(monkeypatch, "APIError", "something unexpected")
+    with pytest.raises(ProviderResponseError):
+        provider.complete(_request())
+
+
+def test_every_translated_error_is_an_aiforge_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    for error_name in (
+        "AuthenticationError",
+        "RateLimitError",
+        "APITimeoutError",
+        "APIConnectionError",
+        "APIStatusError",
+        "APIError",
+    ):
+        provider = _provider_with_error(monkeypatch, error_name, "boom")
+        with pytest.raises(AIForgeError):
+            provider.complete(_request())
 
 
 def test_missing_sdk_raises_helpful_import_error(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -39,6 +39,42 @@ def test_register_instance_is_returned_directly() -> None:
     assert container.resolve(key) == "hello"
 
 
+def test_singleton_resolve_is_thread_safe() -> None:
+    # Regression: resolve() used an unlocked check-then-build-then-cache,
+    # so concurrent first resolves each invoked the factory.
+    import threading
+    import time
+
+    container = Container()
+    key: Key[object] = Key("slow")
+    calls: list[int] = []
+
+    def factory() -> object:
+        calls.append(1)
+        time.sleep(0.05)
+        return object()
+
+    container.register(key, factory)
+    barrier = threading.Barrier(8)
+    results: list[object] = []
+    results_lock = threading.Lock()
+
+    def worker() -> None:
+        barrier.wait()
+        instance = container.resolve(key)
+        with results_lock:
+            results.append(instance)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(calls) == 1
+    assert all(r is results[0] for r in results)
+
+
 def test_resolve_missing_key_raises_key_error() -> None:
     container = Container()
     key: Key[object] = Key("missing")

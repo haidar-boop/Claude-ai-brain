@@ -60,6 +60,26 @@ def test_from_dict_wrong_type_for_list_field_raises() -> None:
         SkillManifest.from_dict({"name": "x", "description": "y", "languages": "python"})
 
 
+def test_from_dict_string_enabled_raises_instead_of_silently_inverting() -> None:
+    # Regression: bool("false") is True, so a quoted TOML string silently
+    # shipped the skill ENABLED. Must raise a clear validation error.
+    with pytest.raises(SkillValidationError, match="'enabled' must be a boolean"):
+        SkillManifest.from_dict({"name": "x", "description": "y", "enabled": "false"})
+
+
+def test_from_dict_string_priority_raises_skill_validation_error() -> None:
+    # Regression: int("high") raised a raw ValueError, escaping the
+    # documented "every manifest failure is SkillValidationError" contract.
+    with pytest.raises(SkillValidationError, match="'priority' must be an integer"):
+        SkillManifest.from_dict({"name": "x", "description": "y", "priority": "high"})
+
+
+def test_from_dict_bool_priority_raises() -> None:
+    # bool is an int subclass; `priority = true` is a mistake, not priority=1.
+    with pytest.raises(SkillValidationError, match="'priority' must be an integer"):
+        SkillManifest.from_dict({"name": "x", "description": "y", "priority": True})
+
+
 def test_from_toml_parses_file(tmp_path: Path) -> None:
     toml_path = tmp_path / "skill.toml"
     toml_path.write_text('name = "python"\ndescription = "Python skill"\nlanguages = ["python"]\n')

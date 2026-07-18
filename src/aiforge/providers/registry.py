@@ -9,6 +9,7 @@ to change to add a new provider.
 from __future__ import annotations
 
 import inspect
+import threading
 from collections.abc import Callable
 from importlib.metadata import entry_points
 
@@ -22,18 +23,26 @@ _ENTRY_POINT_GROUP = "aiforge.providers"
 
 
 class ProviderRegistry:
-    """Lazily-instantiating registry of :class:`~aiforge.providers.base.Provider` factories."""
+    """Lazily-instantiating registry of :class:`~aiforge.providers.base.Provider` factories.
+
+    Thread-safe: the zero-argument instance cache is guarded by a lock, so
+    concurrent first-use callers (e.g. requests racing in via
+    ``ThreadingHTTPServer`` or ``Engine.arun``'s thread offload) share one
+    constructed instance instead of each building their own.
+    """
 
     def __init__(self) -> None:
         self._factories: Registry[Callable[..., Provider]] = Registry(kind="provider")
         self._instances: dict[str, Provider] = {}
+        self._lock = threading.Lock()
 
     def register_factory(
         self, name: str, factory: Callable[..., Provider], *, replace: bool = False
     ) -> None:
         """Register a keyword-args-only *factory* under *name*."""
-        self._factories.register(name, factory, replace=replace)
-        self._instances.pop(name, None)
+        with self._lock:
+            self._factories.register(name, factory, replace=replace)
+            self._instances.pop(name, None)
 
     def discover_entry_points(self) -> None:
         """Register every provider factory advertised via the entry-point group.
@@ -42,10 +51,11 @@ class ProviderRegistry:
         alone (call :meth:`register_factory` with ``replace=True`` to
         override explicitly).
         """
-        for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
-            if entry_point.name in self._factories:
-                continue
-            self._factories.register(entry_point.name, entry_point.load())
+        with self._lock:
+            for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+                if entry_point.name in self._factories:
+                    continue
+                self._factories.register(entry_point.name, entry_point.load())
 
     def get_or_create(self, name: str, **kwargs: object) -> Provider:
         """Return the cached instance for *name*, constructing it on first use.
@@ -55,12 +65,16 @@ class ProviderRegistry:
         """
         if kwargs:
             return self._build(name, kwargs)
-        cached = self._instances.get(name)
-        if cached is not None:
-            return cached
-        instance = self._build(name, {})
-        self._instances[name] = instance
-        return instance
+        # Construction happens under the lock deliberately: the singleton
+        # guarantee ("one shared instance per name") matters more than
+        # first-call construction parallelism, and providers build quickly.
+        with self._lock:
+            cached = self._instances.get(name)
+            if cached is not None:
+                return cached
+            instance = self._build(name, {})
+            self._instances[name] = instance
+            return instance
 
     def require(self, name: str) -> Provider:
         """Return the cached, zero-argument instance for *name*."""
@@ -83,22 +97,25 @@ class ProviderRegistry:
         :class:`~aiforge.core.errors.ProviderNotFoundError` if *name* isn't
         a registered factory.
         """
-        try:
-            factory = self._factories.require(name)
-        except KeyError:
-            raise ProviderNotFoundError(name, available=tuple(self.names())) from None
-        params = inspect.signature(factory).parameters
-        accepts_var_keyword = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
-        kwargs = (
-            dict(candidate_kwargs)
-            if accepts_var_keyword
-            else {k: v for k, v in candidate_kwargs.items() if k in params}
-        )
-        if not kwargs:
-            return None
-        instance = factory(**kwargs)
-        self._instances[name] = instance
-        return instance
+        with self._lock:
+            try:
+                factory = self._factories.require(name)
+            except KeyError:
+                raise ProviderNotFoundError(name, available=tuple(self.names())) from None
+            params = inspect.signature(factory).parameters
+            accepts_var_keyword = any(
+                p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
+            kwargs = (
+                dict(candidate_kwargs)
+                if accepts_var_keyword
+                else {k: v for k, v in candidate_kwargs.items() if k in params}
+            )
+            if not kwargs:
+                return None
+            instance = factory(**kwargs)
+            self._instances[name] = instance
+            return instance
 
     def _build(self, name: str, kwargs: dict[str, object]) -> Provider:
         try:

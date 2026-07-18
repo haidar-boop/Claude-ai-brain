@@ -39,6 +39,11 @@ def serve(*, host: str = "127.0.0.1", port: int = 8420, forge: AIForge | None = 
 
 def _make_handler(forge: AIForge) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
+        # Applied by socketserver as the connection's socket timeout; without
+        # it, a client that declares a Content-Length and then stalls pins
+        # its worker thread forever (ThreadingHTTPServer has no thread cap).
+        timeout = 30
+
         def log_message(self, format_str: str, *args: Any) -> None:
             _logger.debug(format_str, extra={"extra_fields": {"args": args}})
 
@@ -61,7 +66,9 @@ def _make_handler(forge: AIForge) -> type[BaseHTTPRequestHandler]:
                     prompt,
                     provider=payload.get("provider"),
                     model=payload.get("model"),
-                    skills=tuple(payload.get("skills", ())),
+                    # `or ()` also covers an explicit JSON null, which
+                    # dict.get's default does not.
+                    skills=tuple(payload.get("skills") or ()),
                     system=payload.get("system"),
                     max_tokens=payload.get("max_tokens"),
                 )
