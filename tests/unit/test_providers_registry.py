@@ -86,6 +86,30 @@ def test_discover_entry_points_does_not_override_existing_registration() -> None
     assert registry.require("fake") is sentinel
 
 
+def test_discover_entry_points_skips_broken_plugin_and_keeps_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression: one third-party entry point whose load() raised aborted
+    # discovery entirely, leaving even the built-in providers unregistered.
+    import types
+
+    from aiforge.providers import registry as registry_module
+
+    def _broken_load() -> None:
+        raise ModuleNotFoundError("no module named 'missing_dependency'")
+
+    fake_eps = [
+        types.SimpleNamespace(name="broken", load=_broken_load),
+        types.SimpleNamespace(name="working", load=lambda: FakeProvider),
+    ]
+    monkeypatch.setattr(registry_module, "entry_points", lambda *, group: fake_eps)
+    registry = ProviderRegistry()
+    registry.discover_entry_points()
+    assert "broken" not in registry
+    assert "working" in registry
+    assert registry.require("working").name == "fake"
+
+
 def test_configure_passes_only_accepted_kwargs() -> None:
     # FakeProvider's constructor has no max_retries/timeout parameter --
     # configure() must silently drop them rather than raising TypeError.
@@ -134,13 +158,24 @@ def test_configure_seeds_cache_for_subsequent_require() -> None:
 
 def test_factory_can_consult_registry_without_deadlock() -> None:
     # The lock is an RLock: a factory that itself reads the registry on the
-    # same thread (e.g. a wrapper provider) must not deadlock.
+    # same thread (e.g. a wrapper provider) must not deadlock. Run in a
+    # joined-with-timeout worker so an RLock->Lock regression FAILS cleanly
+    # here instead of hanging the whole suite with no diagnostic.
+    import threading
+
     registry = ProviderRegistry()
     registry.register_factory("inner", lambda: FakeProvider(model="inner-model"))
     registry.register_factory(
         "outer", lambda: FakeProvider(model=f"wraps-{registry.require('inner').model}")
     )
-    assert registry.require("outer").model == "wraps-inner-model"
+
+    result: list[str] = []
+    worker = threading.Thread(target=lambda: result.append(registry.require("outer").model))
+    worker.daemon = True
+    worker.start()
+    worker.join(timeout=5.0)
+    assert not worker.is_alive(), "nested require deadlocked -- lock must be an RLock"
+    assert result == ["wraps-inner-model"]
 
 
 def test_get_or_create_returns_one_shared_instance_under_concurrency() -> None:

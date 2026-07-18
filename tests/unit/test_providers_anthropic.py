@@ -115,7 +115,19 @@ class _FakeMessagesAPI:
             raise self._raise_error
         return _FakeStreamContext("hello from claude")
 
-    def count_tokens(self, **kwargs: Any) -> _FakeUsage:
+    def count_tokens(
+        self,
+        *,
+        messages: Any,
+        model: Any,
+        system: Any = None,
+        thinking: Any = None,
+        output_config: Any = None,
+    ) -> _FakeUsage:
+        # Mirrors the real SDK: Messages.count_tokens accepts a narrower
+        # parameter set than create() (no temperature/max_tokens/stream), so
+        # forwarding an unsupported param must TypeError here like it would
+        # against the real client.
         return _FakeUsage(input_tokens=42)
 
 
@@ -241,6 +253,15 @@ def test_count_tokens_delegates_to_sdk(fake_anthropic_module: types.ModuleType) 
     assert provider.count_tokens(_request()) == 42
 
 
+def test_count_tokens_drops_temperature(fake_anthropic_module: types.ModuleType) -> None:
+    # Regression: Messages.count_tokens has no temperature parameter, so a
+    # request with temperature set crashed with TypeError before this pop.
+    from aiforge.providers.anthropic_provider import AnthropicProvider
+
+    provider = AnthropicProvider()
+    assert provider.count_tokens(_request(temperature=0.2)) == 42
+
+
 def test_build_params_includes_system_thinking_and_effort(
     fake_anthropic_module: types.ModuleType,
 ) -> None:
@@ -285,6 +306,22 @@ def test_rate_limit_error_is_translated_with_retry_after(monkeypatch: pytest.Mon
     with pytest.raises(ProviderRateLimitError) as exc_info:
         provider.complete(_request())
     assert exc_info.value.retry_after == 5.0
+
+
+def test_parse_retry_after_rejects_non_finite_and_negative_values() -> None:
+    # The header value is attacker-controllable; inf/nan/negatives would
+    # poison any caller sleeping on or comparing against retry_after.
+    from aiforge.providers.anthropic_provider import _parse_retry_after
+
+    def _exc(value: str) -> Exception:
+        exc = Exception("rate limited")
+        exc.response = types.SimpleNamespace(headers={"retry-after": value})  # type: ignore[attr-defined]
+        return exc
+
+    assert _parse_retry_after(_exc("5")) == 5.0
+    assert _parse_retry_after(_exc("0")) == 0.0
+    for hostile in ("inf", "infinity", "-inf", "nan", "-5", "1e400"):
+        assert _parse_retry_after(_exc(hostile)) is None, hostile
 
 
 def test_timeout_error_is_translated(monkeypatch: pytest.MonkeyPatch) -> None:

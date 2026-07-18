@@ -45,5 +45,24 @@ All notable changes to this project are documented in this file. Format based on
   orjson path (TOML configs can contain real date objects).
 - `aiforge.utils.logging.configure()` is thread-safe (no duplicate handlers on concurrent first
   use).
+- Singleton locks (`ProviderRegistry`, `Container`) are reentrant (`RLock`), so a factory that
+  composes other registrations on the same thread cannot deadlock.
+- Cost estimation clamps negative wire-supplied token counts to zero and returns `None` on float
+  overflow instead of letting `OverflowError` escape post-response accounting.
+- `AnthropicProvider.count_tokens` no longer forwards `temperature` (not accepted by
+  `messages.count_tokens`); `retry_after` parsing rejects negative/non-finite header values.
+- One broken third-party entry point (provider or skill) is logged and skipped instead of
+  aborting discovery and taking the built-ins down with it.
+- `AIFORGE_LOG_LEVEL` is normalized and validated (lowercase works; garbage falls back to
+  WARNING with a warning instead of making the library unimportable); `redact()` masks compound
+  secret keys (`anthropic_api_key`, `client_secret`, `auth_token`) while leaving token-count
+  fields alone.
+- Env overrides are type-checked against the schema (`AIFORGE__...=4k` into an int field, or an
+  over-deep key path replacing a scalar with a dict, now raise `ConfigError`); pathologically
+  nested TOML raises `ConfigError`/`SkillValidationError` instead of a bare `RecursionError`.
+- Skill manifest list fields must contain only strings (mixed TOML arrays are rejected at load
+  time instead of crashing later in indexing/scoring).
+- The stdlib JSON fallback sets `allow_nan=False` (never emits spec-invalid `NaN`/`Infinity`
+  tokens) and its date/datetime handling is now exercised by tests even when orjson is installed.
 
 [Unreleased]: https://github.com/haidar-boop/claude-ai-brain/commits/claude/ai-coding-framework-design-eq7nrm

@@ -80,6 +80,26 @@ def test_from_dict_bool_priority_raises() -> None:
         SkillManifest.from_dict({"name": "x", "description": "y", "priority": True})
 
 
+def test_from_dict_non_string_list_element_raises() -> None:
+    # Regression: TOML 1.0 allows mixed arrays; languages = ["python", 3]
+    # passed validation and crashed later in indexing/scoring/fnmatch with a
+    # traceback that never named the offending manifest.
+    with pytest.raises(SkillValidationError, match="'languages' must contain only strings"):
+        SkillManifest.from_dict({"name": "x", "description": "y", "languages": ["python", 3]})
+    with pytest.raises(SkillValidationError, match="'file_globs' must contain only strings"):
+        SkillManifest.from_dict({"name": "x", "description": "y", "file_globs": [1]})
+
+
+def test_from_toml_deeply_nested_raises_skill_validation_error(tmp_path: Path) -> None:
+    # tomllib raises bare RecursionError on pathological nesting; the
+    # contract is that every manifest failure is a SkillValidationError
+    # naming its source file.
+    toml_path = tmp_path / "skill.toml"
+    toml_path.write_text("keywords = " + "[" * 5000 + "]" * 5000 + "\n")
+    with pytest.raises(SkillValidationError, match="nested too deeply"):
+        SkillManifest.from_toml(toml_path)
+
+
 def test_from_toml_parses_file(tmp_path: Path) -> None:
     toml_path = tmp_path / "skill.toml"
     toml_path.write_text('name = "python"\ndescription = "Python skill"\nlanguages = ["python"]\n')

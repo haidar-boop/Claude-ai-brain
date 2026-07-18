@@ -101,6 +101,11 @@ class SkillManifest:
             raise SkillValidationError(f"cannot read manifest: {exc}", source=str(path)) from exc
         except tomllib.TOMLDecodeError as exc:
             raise SkillValidationError(f"invalid TOML: {exc}", source=str(path)) from exc
+        except RecursionError as exc:
+            # tomllib raises bare RecursionError for pathologically nested
+            # documents; keep the "manifest failures are SkillValidationError
+            # naming their source" contract.
+            raise SkillValidationError("TOML nested too deeply to parse", source=str(path)) from exc
         return cls.from_dict(data, source=str(path))
 
     @classmethod
@@ -118,6 +123,15 @@ class SkillManifest:
                     raise SkillValidationError(
                         f"field {key!r} must be a list, got {type(value).__name__}", source=source
                     )
+                # TOML 1.0 permits mixed-type arrays; a non-string element
+                # would pass here and crash far away (indexing, scoring,
+                # fnmatch) with a traceback that never names this file.
+                for item in value:
+                    if not isinstance(item, str):
+                        raise SkillValidationError(
+                            f"field {key!r} must contain only strings, got {type(item).__name__}",
+                            source=source,
+                        )
                 kwargs[key] = tuple(value)
             elif key in _STR_FIELDS:
                 kwargs[key] = str(value)

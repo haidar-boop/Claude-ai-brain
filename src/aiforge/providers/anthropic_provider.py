@@ -12,6 +12,7 @@ never hardcodes a key and never reads one from a config file.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -113,8 +114,11 @@ class AnthropicProvider(BaseProvider):
 
     def count_tokens(self, request: ChatRequest) -> int:
         params = self._build_params(request)
+        # messages.count_tokens accepts a narrower parameter set than
+        # messages.create -- drop the sampling/generation-only fields.
         params.pop("max_tokens", None)
         params.pop("stream", None)
+        params.pop("temperature", None)
         result = self._client.messages.count_tokens(**params)
         return int(result.input_tokens)
 
@@ -182,6 +186,13 @@ class AnthropicProvider(BaseProvider):
 
 
 def _parse_retry_after(exc: Exception) -> float | None:
+    """Parse a retry-after header into a finite, non-negative delay in seconds.
+
+    The header value comes from the (potentially hostile) wire; ``inf``,
+    ``nan``, and negative values would poison anything that sleeps on or
+    compares against ``retry_after``, so they parse to ``None`` like any
+    other unusable value.
+    """
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if not headers:
@@ -190,6 +201,9 @@ def _parse_retry_after(exc: Exception) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(parsed) or parsed < 0:
+        return None
+    return parsed

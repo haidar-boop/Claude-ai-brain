@@ -337,8 +337,8 @@ request, call the SDK, translate any exception, log the outcome, return/yield.
 context manager. Both iterate `stream.text_stream`, yielding a `StreamChunk`
 per piece, then call `stream.get_final_message()` for the completed usage
 and yield the trailing `is_final=True` chunk. `count_tokens()` reuses
-`_build_params` but pops `max_tokens` and `stream` (not accepted by
-`messages.count_tokens`) and returns `int(result.input_tokens)`.
+`_build_params` but pops `max_tokens`, `stream`, and `temperature` (not
+accepted by `messages.count_tokens`) and returns `int(result.input_tokens)`.
 
 ### Error translation
 
@@ -349,7 +349,7 @@ exc`, so the original SDK exception is always chained as the cause):
 | Anthropic SDK exception | AIForge exception (`aiforge.core.errors`) | Notes |
 | --- | --- | --- |
 | `anthropic.AuthenticationError` | `ProviderAuthError` | missing/invalid credentials |
-| `anthropic.RateLimitError` | `ProviderRateLimitError` | `retry_after` (float seconds) parsed from the response's `retry-after` header via `_parse_retry_after`; `None` if the header is missing or unparseable |
+| `anthropic.RateLimitError` | `ProviderRateLimitError` | `retry_after` (float seconds) parsed from the response's `retry-after` header via `_parse_retry_after`; `None` if the header is missing, unparseable, negative, or non-finite (`inf`/`nan` would poison anything sleeping on it) |
 | `anthropic.APITimeoutError` | `ProviderTimeoutError` | request exceeded the client's `timeout` |
 | `anthropic.APIConnectionError` | `ProviderConnectionError` | network unreachable: DNS failure, connection reset, proxy outage (checked after `APITimeoutError`, its narrower subclass) |
 | `anthropic.APIStatusError` | `ProviderResponseError` | any other non-2xx SDK status error |

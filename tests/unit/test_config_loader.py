@@ -119,3 +119,28 @@ def test_bare_string_skills_disabled_raises(tmp_path: Path) -> None:
     project.write_text('[skills]\ndisabled = "rust"\n')
     with pytest.raises(ConfigError, match="disabled must be an array"):
         load_config(project_path=project, env={})
+
+
+def test_env_override_with_uncoercible_int_raises_config_error(tmp_path: Path) -> None:
+    # Regression: AIFORGE__PROVIDERS__ANTHROPIC__MAX_TOKENS=4k landed as the
+    # string "4k" in an int-typed field with no error.
+    missing = tmp_path / "aiforge.toml"
+    with pytest.raises(ConfigError, match="max_tokens must be int"):
+        load_config(project_path=missing, env={"AIFORGE__PROVIDERS__ANTHROPIC__MAX_TOKENS": "4k"})
+
+
+def test_env_override_deeper_than_schema_raises_config_error(tmp_path: Path) -> None:
+    # Regression: AIFORGE__PROVIDERS__ANTHROPIC__MODEL__NAME=x silently
+    # replaced the scalar model field with {'name': 'x'}.
+    missing = tmp_path / "aiforge.toml"
+    with pytest.raises(ConfigError, match="model must be str"):
+        load_config(project_path=missing, env={"AIFORGE__PROVIDERS__ANTHROPIC__MODEL__NAME": "x"})
+
+
+def test_deeply_nested_toml_raises_config_error_not_recursion_error(tmp_path: Path) -> None:
+    # tomllib raises bare RecursionError on pathological nesting; the
+    # documented contract is that every config failure is a ConfigError.
+    project = tmp_path / "aiforge.toml"
+    project.write_text("v = " + "[" * 5000 + "]" * 5000 + "\n")
+    with pytest.raises(ConfigError, match="nested too deeply"):
+        load_config(project_path=project, env={})

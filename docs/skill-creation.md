@@ -59,8 +59,9 @@ strict:
   time instead of silently doing nothing.
 - The twelve list-shaped fields (`languages`, `frameworks`, `libraries`, `file_globs`, `keywords`,
   `patterns`, `best_practices`, `debugging`, `optimization`, `testing`, `review_rules`, `requires`)
-  must be TOML arrays — `languages = "python"` (a bare string) raises `SkillValidationError`
-  rather than being auto-wrapped into a one-element tuple.
+  must be TOML arrays **of strings** — `languages = "python"` (a bare string) and
+  `languages = ["python", 3]` (a mixed array, legal TOML) both raise `SkillValidationError`
+  rather than being accepted and crashing far away at indexing or scoring time.
 - `priority` must be a real TOML integer and `enabled` a real TOML boolean — a quoted string like
   `enabled = "false"` or `priority = "high"` raises `SkillValidationError` rather than being
   coerced (`bool("false")` is `True`, so silent coercion would invert the author's intent).

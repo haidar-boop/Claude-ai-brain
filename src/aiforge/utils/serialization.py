@@ -7,9 +7,12 @@ extra (``pip install aiforge[fast]``) to pull in orjson.
 The fallback also serializes ``datetime``/``date``/``time`` values (via
 ``isoformat()``), matching orjson's native handling -- TOML parsing produces
 real date/datetime objects, so config containing one must serialize
-identically on both paths. Known remaining divergence: non-string dict keys,
-which stdlib ``json`` coerces to strings while orjson rejects by default;
-AIForge itself never serializes such payloads.
+identically on both paths. The fallback sets ``allow_nan=False`` so it never
+emits the spec-invalid ``NaN``/``Infinity`` tokens stdlib ``json`` would
+otherwise produce. Known remaining divergences (AIForge itself never
+serializes such payloads): non-finite floats become ``null`` under orjson
+but raise ``ValueError`` on the fallback, and non-string dict keys are
+coerced to strings by stdlib ``json`` but rejected by orjson.
 """
 
 from __future__ import annotations
@@ -39,7 +42,9 @@ def dumps(obj: Any, *, sort_keys: bool = False) -> str:
     if _orjson_mod is not None:
         option = _orjson_mod.OPT_SORT_KEYS if sort_keys else 0
         return _orjson_mod.dumps(obj, option=option).decode("utf-8")
-    return json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default)
+    return json.dumps(
+        obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default, allow_nan=False
+    )
 
 
 def dumps_bytes(obj: Any, *, sort_keys: bool = False) -> bytes:
@@ -48,7 +53,7 @@ def dumps_bytes(obj: Any, *, sort_keys: bool = False) -> bytes:
         option = _orjson_mod.OPT_SORT_KEYS if sort_keys else 0
         return _orjson_mod.dumps(obj, option=option)
     return json.dumps(
-        obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default
+        obj, sort_keys=sort_keys, separators=(",", ":"), default=_json_default, allow_nan=False
     ).encode("utf-8")
 
 

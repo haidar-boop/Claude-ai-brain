@@ -16,10 +16,12 @@ from importlib.metadata import entry_points
 from aiforge.core.errors import ProviderNotFoundError
 from aiforge.core.registry import Registry
 from aiforge.providers.base import Provider
+from aiforge.utils.logging import get_logger
 
 __all__ = ["ProviderRegistry"]
 
 _ENTRY_POINT_GROUP = "aiforge.providers"
+_logger = get_logger(__name__)
 
 
 class ProviderRegistry:
@@ -52,13 +54,25 @@ class ProviderRegistry:
 
         Safe to call multiple times; an already-registered name is left
         alone (call :meth:`register_factory` with ``replace=True`` to
-        override explicitly).
+        override explicitly). A broken entry point (e.g. a plugin installed
+        without its dependencies) is logged and skipped rather than aborting
+        discovery -- one bad third-party package must not take out the
+        built-in providers with it.
         """
         with self._lock:
             for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
                 if entry_point.name in self._factories:
                     continue
-                self._factories.register(entry_point.name, entry_point.load())
+                try:
+                    factory = entry_point.load()
+                except Exception:
+                    _logger.warning(
+                        "skipping broken provider entry point",
+                        extra={"extra_fields": {"entry_point": entry_point.name}},
+                        exc_info=True,
+                    )
+                    continue
+                self._factories.register(entry_point.name, factory)
 
     def get_or_create(self, name: str, **kwargs: object) -> Provider:
         """Return the cached instance for *name*, constructing it on first use.

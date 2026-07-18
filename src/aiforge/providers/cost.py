@@ -40,18 +40,31 @@ PRICING: dict[str, ModelPricing] = {
 
 
 def estimate_cost(model: str, usage: Usage) -> float | None:
-    """Return the estimated USD cost of *usage* for *model*, or ``None`` if unpriced."""
+    """Return the estimated USD cost of *usage* for *model*, or ``None`` if unpriced.
+
+    Token counts come from the provider's wire response and are not trusted:
+    negative values are clamped to zero (a hostile or buggy endpoint must not
+    drive the spend ledger negative), and values too large for float
+    arithmetic yield ``None`` rather than letting ``OverflowError`` escape
+    from the engine's post-response cost accounting.
+    """
     pricing = PRICING.get(model)
     if pricing is None:
         return None
-    cost = (
-        usage.input_tokens * pricing.input_per_million
-        + usage.output_tokens * pricing.output_per_million
-    ) / 1_000_000
-    if usage.cache_creation_input_tokens and pricing.cache_write_per_million is not None:
-        cost += usage.cache_creation_input_tokens * pricing.cache_write_per_million / 1_000_000
-    if usage.cache_read_input_tokens and pricing.cache_read_per_million is not None:
-        cost += usage.cache_read_input_tokens * pricing.cache_read_per_million / 1_000_000
+    input_tokens = max(0, usage.input_tokens)
+    output_tokens = max(0, usage.output_tokens)
+    cache_write_tokens = max(0, usage.cache_creation_input_tokens)
+    cache_read_tokens = max(0, usage.cache_read_input_tokens)
+    try:
+        cost = (
+            input_tokens * pricing.input_per_million + output_tokens * pricing.output_per_million
+        ) / 1_000_000
+        if cache_write_tokens and pricing.cache_write_per_million is not None:
+            cost += cache_write_tokens * pricing.cache_write_per_million / 1_000_000
+        if cache_read_tokens and pricing.cache_read_per_million is not None:
+            cost += cache_read_tokens * pricing.cache_read_per_million / 1_000_000
+    except OverflowError:
+        return None
     return cost
 
 

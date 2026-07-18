@@ -41,13 +41,24 @@ def test_register_instance_is_returned_directly() -> None:
 
 def test_factory_can_resolve_other_keys_without_deadlock() -> None:
     # The lock is an RLock: a factory composing other registrations
-    # (nested resolve on the same thread) must work, not deadlock.
+    # (nested resolve on the same thread) must work, not deadlock. Run in a
+    # joined-with-timeout worker so an RLock->Lock regression FAILS cleanly
+    # here instead of hanging the whole suite with no diagnostic.
+    import threading
+
     container = Container()
     part_key: Key[str] = Key("part")
     whole_key: Key[str] = Key("whole")
     container.register(part_key, lambda: "engine")
     container.register(whole_key, lambda: f"car with {container.resolve(part_key)}")
-    assert container.resolve(whole_key) == "car with engine"
+
+    result: list[str] = []
+    worker = threading.Thread(target=lambda: result.append(container.resolve(whole_key)))
+    worker.daemon = True
+    worker.start()
+    worker.join(timeout=5.0)
+    assert not worker.is_alive(), "nested resolve deadlocked -- lock must be an RLock"
+    assert result == ["car with engine"]
 
 
 def test_singleton_resolve_is_thread_safe() -> None:

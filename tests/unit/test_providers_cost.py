@@ -93,3 +93,21 @@ def test_cost_tracker_reset() -> None:
     assert tracker.total_usd == 0.0
     assert tracker.request_count == 0
     assert tracker.by_model() == {}
+
+
+def test_estimate_cost_clamps_negative_token_counts() -> None:
+    # Token counts come off the wire; a hostile/buggy endpoint must not be
+    # able to drive the spend ledger negative.
+    usage = Usage(input_tokens=-1_000_000_000, output_tokens=0)
+    assert estimate_cost("claude-opus-4-8", usage) == 0.0
+    tracker = CostTracker()
+    tracker.record("claude-opus-4-8", usage)
+    assert tracker.total_usd == 0.0
+
+
+def test_estimate_cost_returns_none_on_overflow_instead_of_raising() -> None:
+    # A 310-digit token count overflows float arithmetic; that must yield
+    # None (unpriced) rather than an OverflowError escaping the engine's
+    # post-response cost accounting.
+    usage = Usage(input_tokens=10**309, output_tokens=0)
+    assert estimate_cost("claude-opus-4-8", usage) is None

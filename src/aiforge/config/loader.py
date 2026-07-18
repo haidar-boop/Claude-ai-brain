@@ -66,6 +66,10 @@ def _load_toml(path: Path) -> dict[str, Any]:
         return {}
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
+    except RecursionError as exc:
+        # tomllib raises bare RecursionError for pathologically nested
+        # documents; keep the "config failures are ConfigError" contract.
+        raise ConfigError(f"TOML in {path} is nested too deeply to parse") from exc
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -156,4 +160,46 @@ def _to_config(data: dict[str, Any]) -> AIForgeConfig:
         )
     except (TypeError, AttributeError) as exc:
         raise ConfigError(f"invalid configuration: {exc}") from exc
-    return AIForgeConfig(engine=engine, providers=providers, routing=routing, skills=skills)
+    config = AIForgeConfig(engine=engine, providers=providers, routing=routing, skills=skills)
+    _check_types(config)
+    return config
+
+
+def _check_types(config: AIForgeConfig) -> None:
+    """Reject wrong-typed scalar fields on the constructed config.
+
+    Dataclasses don't enforce annotations at runtime, and environment
+    overrides (``AIFORGE__...``) can inject arbitrary strings -- or, via an
+    over-deep key path, whole dicts -- into fields the schema types as
+    ``int``/``float``/``str``. Catch that here with a clear error instead of
+    letting a silently-wrong config fail much later at request time.
+    """
+
+    def expect(value: object, expected: type | tuple[type, ...], where: str) -> None:
+        # bool is an int subclass; a bool in an int-typed field is a mistake.
+        if isinstance(value, bool) and expected is not bool:
+            raise ConfigError(f"{where} must be {_type_name(expected)}, got bool")
+        if not isinstance(value, expected):
+            raise ConfigError(f"{where} must be {_type_name(expected)}, got {type(value).__name__}")
+
+    expect(config.engine.default_provider, str, "[engine] default_provider")
+    for name, provider in config.providers.items():
+        where = f"[providers.{name}]"
+        if provider.model is not None:
+            expect(provider.model, str, f"{where} model")
+        expect(provider.max_tokens, int, f"{where} max_tokens")
+        expect(provider.max_retries, int, f"{where} max_retries")
+        expect(provider.timeout, (int, float), f"{where} timeout")
+        expect(provider.extra, dict, f"{where} extra")
+    expect(config.routing.max_attempts, int, "[routing] max_attempts")
+    for rule in config.routing.rules:
+        expect(rule.match, str, "[routing] rule match")
+        expect(rule.provider, str, "[routing] rule provider")
+        if rule.model is not None:
+            expect(rule.model, str, "[routing] rule model")
+
+
+def _type_name(expected: type | tuple[type, ...]) -> str:
+    if isinstance(expected, tuple):
+        return " or ".join(t.__name__ for t in expected)
+    return expected.__name__

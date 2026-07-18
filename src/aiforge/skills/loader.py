@@ -13,12 +13,14 @@ from importlib.metadata import entry_points
 from pathlib import Path
 
 from aiforge.skills.manifest import SkillManifest
+from aiforge.utils.logging import get_logger
 
 __all__ = ["BUILTIN_SKILLS_DIR", "discover_skills"]
 
 BUILTIN_SKILLS_DIR = Path(__file__).parent / "builtin"
 _ENTRY_POINT_GROUP = "aiforge.skills"
 _MANIFEST_FILENAME = "skill.toml"
+_logger = get_logger(__name__)
 
 
 def discover_skills(*, extra_dirs: Iterable[Path | str] = ()) -> list[SkillManifest]:
@@ -49,14 +51,31 @@ def _scan_directory(directory: Path) -> list[SkillManifest]:
 
 
 def _discover_entry_points() -> list[SkillManifest]:
+    # A broken skill package (failed import, crashing loader callable, wrong
+    # return type) is logged and skipped rather than aborting discovery --
+    # one bad third-party install must not take out every other skill.
     manifests = []
     for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
-        loaded = entry_point.load()
-        manifest = loaded() if callable(loaded) else loaded
-        if not isinstance(manifest, SkillManifest):
-            raise TypeError(
-                f"entry point {entry_point.name!r} in group {_ENTRY_POINT_GROUP!r} must "
-                f"resolve to a SkillManifest, got {type(manifest).__name__}"
+        try:
+            loaded = entry_point.load()
+            manifest = loaded() if callable(loaded) else loaded
+        except Exception:
+            _logger.warning(
+                "skipping broken skill entry point",
+                extra={"extra_fields": {"entry_point": entry_point.name}},
+                exc_info=True,
             )
+            continue
+        if not isinstance(manifest, SkillManifest):
+            _logger.warning(
+                "skipping skill entry point that did not resolve to a SkillManifest",
+                extra={
+                    "extra_fields": {
+                        "entry_point": entry_point.name,
+                        "resolved_type": type(manifest).__name__,
+                    }
+                },
+            )
+            continue
         manifests.append(manifest)
     return manifests
