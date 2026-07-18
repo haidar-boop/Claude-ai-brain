@@ -84,3 +84,49 @@ def test_discover_entry_points_does_not_override_existing_registration() -> None
     registry.register_factory("fake", lambda: sentinel)
     registry.discover_entry_points()
     assert registry.require("fake") is sentinel
+
+
+def test_configure_passes_only_accepted_kwargs() -> None:
+    # FakeProvider's constructor has no max_retries/timeout parameter --
+    # configure() must silently drop them rather than raising TypeError.
+    registry = ProviderRegistry()
+    registry.register_factory("fake", FakeProvider)
+    instance = registry.configure("fake", model="configured-model", max_retries=5, timeout=30.0)
+    assert instance is not None
+    assert instance.model == "configured-model"
+
+
+def test_configure_passes_all_kwargs_to_var_keyword_factory() -> None:
+    captured: dict[str, object] = {}
+
+    def factory(**kwargs: object) -> FakeProvider:
+        captured.update(kwargs)
+        return FakeProvider(model=str(kwargs.get("model", "fake-model")))
+
+    registry = ProviderRegistry()
+    registry.register_factory("fake", factory)
+    registry.configure("fake", model="m", max_retries=5, timeout=30.0)
+    assert captured == {"model": "m", "max_retries": 5, "timeout": 30.0}
+
+
+def test_configure_returns_none_and_caches_nothing_when_no_kwargs_apply() -> None:
+    registry = ProviderRegistry()
+    registry.register_factory("fake", FakeProvider)
+    result = registry.configure("fake", max_retries=5, timeout=30.0)
+    assert result is None
+    # No cached instance was seeded -- require() falls through to a fresh
+    # zero-argument default construction rather than returning None.
+    assert registry.require("fake").model == "fake-model"
+
+
+def test_configure_raises_provider_not_found_for_unregistered_name() -> None:
+    registry = ProviderRegistry()
+    with pytest.raises(ProviderNotFoundError):
+        registry.configure("missing", model="m")
+
+
+def test_configure_seeds_cache_for_subsequent_require() -> None:
+    registry = ProviderRegistry()
+    registry.register_factory("fake", FakeProvider)
+    configured = registry.configure("fake", model="configured-model")
+    assert registry.require("fake") is configured

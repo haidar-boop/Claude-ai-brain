@@ -8,6 +8,7 @@ to change to add a new provider.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from importlib.metadata import entry_points
 
@@ -64,6 +65,40 @@ class ProviderRegistry:
     def require(self, name: str) -> Provider:
         """Return the cached, zero-argument instance for *name*."""
         return self.get_or_create(name)
+
+    def configure(self, name: str, **candidate_kwargs: object) -> Provider | None:
+        """Build and cache an instance for *name* from *candidate_kwargs*.
+
+        Only the keyword arguments *name*'s factory signature actually
+        declares are passed (via introspection), or all of them if the
+        factory accepts ``**kwargs`` -- callers can safely pass a superset
+        of possible config fields across differently-shaped provider
+        factories (e.g. a fake or third-party provider that doesn't accept
+        ``max_retries``/``timeout``). Subsequent zero-argument
+        :meth:`require`/:meth:`get_or_create` calls for *name* return the
+        resulting instance.
+
+        Returns ``None`` (and registers nothing, leaving the provider's own
+        defaults in effect) if none of *candidate_kwargs* apply. Raises
+        :class:`~aiforge.core.errors.ProviderNotFoundError` if *name* isn't
+        a registered factory.
+        """
+        try:
+            factory = self._factories.require(name)
+        except KeyError:
+            raise ProviderNotFoundError(name, available=tuple(self.names())) from None
+        params = inspect.signature(factory).parameters
+        accepts_var_keyword = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+        kwargs = (
+            dict(candidate_kwargs)
+            if accepts_var_keyword
+            else {k: v for k, v in candidate_kwargs.items() if k in params}
+        )
+        if not kwargs:
+            return None
+        instance = factory(**kwargs)
+        self._instances[name] = instance
+        return instance
 
     def _build(self, name: str, kwargs: dict[str, object]) -> Provider:
         try:

@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from aiforge.config.schema import AIForgeConfig, EngineConfig, RoutingConfig, RoutingRuleConfig
+from aiforge.config.schema import (
+    AIForgeConfig,
+    EngineConfig,
+    ProviderConfig,
+    RoutingConfig,
+    RoutingRuleConfig,
+)
 from aiforge.core.context import TaskRequest
 from aiforge.core.engine import Engine
 from aiforge.providers.fake import FakeProvider
@@ -162,3 +168,44 @@ def test_from_config_wires_routing_rules() -> None:
     provider, model = engine.router.select(hint="write some rust")
     assert provider == "fake"
     assert model == "rust-model"
+
+
+def test_from_config_wires_provider_config_model_into_construction() -> None:
+    # [providers.fake].model must reach the actual FakeProvider instance,
+    # not just sit unused in AIForgeConfig -- this is what _configure_providers
+    # (via ProviderRegistry.configure) exists to guarantee.
+    config = AIForgeConfig(
+        engine=EngineConfig(default_provider="fake"),
+        providers={"fake": ProviderConfig(model="configured-model")},
+    )
+    engine = Engine.from_config(config)
+    result = engine.run(TaskRequest(prompt="hello"))
+    assert result.response.model == "configured-model"
+
+
+def test_from_config_default_max_tokens_from_provider_config() -> None:
+    config = AIForgeConfig(
+        engine=EngineConfig(default_provider="fake"),
+        providers={"fake": ProviderConfig(model="fake-model", max_tokens=8192)},
+    )
+    engine = Engine.from_config(config)
+    assert engine.default_max_tokens == 8192
+    # End-to-end: an unset TaskRequest.max_tokens should reach the provider
+    # as 8192, not the hardcoded 4096 fallback.
+    engine.router.registry.configure(
+        "fake", model="fake-model", respond_fn=lambda request: str(request.max_tokens)
+    )
+    result = engine.run(TaskRequest(prompt="hello"))
+    assert result.response.text == "8192"
+
+
+def test_from_config_ignores_provider_config_for_unregistered_provider_name() -> None:
+    # Config referencing a provider that isn't installed/registered must not
+    # raise -- there's simply nothing to configure.
+    config = AIForgeConfig(
+        engine=EngineConfig(default_provider="fake"),
+        providers={"not-installed": ProviderConfig(model="whatever")},
+    )
+    engine = Engine.from_config(config)
+    result = engine.run(TaskRequest(prompt="hello"))
+    assert result.response.provider == "fake"

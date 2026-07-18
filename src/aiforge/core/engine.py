@@ -47,12 +47,14 @@ class Engine:
         cost_tracker: CostTracker | None = None,
         events: EventBus | None = None,
         base_system: str | None = None,
+        default_max_tokens: int = 4096,
     ) -> None:
         self.router = router
         self.skill_resolver = skill_resolver
         self.cost_tracker = cost_tracker or CostTracker()
         self.events = events or EventBus()
         self.base_system = base_system
+        self.default_max_tokens = default_max_tokens
 
     @classmethod
     def from_config(cls, config: AIForgeConfig, *, base_system: str | None = None) -> Engine:
@@ -66,6 +68,7 @@ class Engine:
         """
         provider_registry = ProviderRegistry()
         provider_registry.discover_entry_points()
+        _configure_providers(provider_registry, config)
 
         skill_registry = SkillRegistry()
         skill_registry.register_all(discover_skills(extra_dirs=config.skills.extra_dirs))
@@ -81,8 +84,12 @@ class Engine:
             fallback_order=config.routing.fallback_order,
             max_attempts=config.routing.max_attempts,
         )
+        default_max_tokens = config.provider_config(config.engine.default_provider).max_tokens
         return cls(
-            router=router, skill_resolver=SkillResolver(skill_registry), base_system=base_system
+            router=router,
+            skill_resolver=SkillResolver(skill_registry),
+            base_system=base_system,
+            default_max_tokens=default_max_tokens,
         )
 
     def run(self, request: TaskRequest) -> EngineResult:
@@ -152,7 +159,7 @@ class Engine:
             return ChatRequest(
                 messages=(Message(role=Role.USER, content=request.prompt),),
                 model=model,
-                max_tokens=request.max_tokens or 4096,
+                max_tokens=request.max_tokens or self.default_max_tokens,
                 system=system,
                 stream=request.stream,
             )
@@ -178,3 +185,28 @@ class Engine:
 def _compose_system(*parts: str | None) -> str | None:
     joined = "\n\n".join(p for p in parts if p)
     return joined or None
+
+
+def _configure_providers(registry: ProviderRegistry, config: AIForgeConfig) -> None:
+    """Seed the registry with instances built from each ``[providers.<name>]`` section.
+
+    Only applies to names already registered as a factory (via entry
+    points) -- config for a provider that isn't installed is silently
+    unused, since there's nothing to construct. ``ProviderRegistry.configure``
+    filters candidate kwargs down to whatever the target factory's own
+    signature accepts, so this works uniformly whether that's
+    ``AnthropicProvider`` (accepts ``model``/``max_retries``/``timeout``) or
+    a provider with a narrower constructor (e.g. ``FakeProvider``, which
+    only accepts ``model``).
+    """
+    for name, provider_cfg in config.providers.items():
+        if name not in registry:
+            continue
+        candidate: dict[str, object] = {
+            "max_retries": provider_cfg.max_retries,
+            "timeout": provider_cfg.timeout,
+            **provider_cfg.extra,
+        }
+        if provider_cfg.model is not None:
+            candidate["model"] = provider_cfg.model
+        registry.configure(name, **candidate)

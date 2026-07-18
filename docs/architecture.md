@@ -69,14 +69,18 @@ design principles the codebase holds itself to.
   configures *which* default provider, routing rules, fallback order, retry attempts, and skill
   enable/disable policy are used to build the router and registries. `AIForgeConfig.providers`
   (per-provider `model` / `max_tokens` / `max_retries` / `timeout` / `extra`, looked up via
-  `AIForgeConfig.provider_config(name)`) is part of the schema and is populated from
-  `[providers.<name>]` sections, but `Engine.from_config()` does not thread it into provider
-  construction -- providers are instantiated through their bare, zero-argument entry-point
-  factory (`ProviderRegistry.get_or_create(name)` with no kwargs), so a provider's effective model
-  comes from that provider class's own default unless a `RoutingRule.model` or `TaskRequest.model`
-  pins one explicitly. A caller that wants config-driven provider construction builds the instance
-  itself and registers it via `ProviderRegistry.register_factory()`, or calls
-  `ProviderRegistry.get_or_create(name, **kwargs)` directly.
+  `AIForgeConfig.provider_config(name)`) is populated from `[providers.<name>]` sections and *is*
+  threaded into provider construction: right after `discover_entry_points()`,
+  `Engine.from_config()` calls a private `_configure_providers()` helper that, for every name with
+  both a registered factory and a `[providers.<name>]` section, calls
+  `ProviderRegistry.configure(name, **candidate_kwargs)` -- which passes through only the keyword
+  arguments that provider's own factory signature actually declares (via `inspect.signature`), so
+  the same call works whether the target is `AnthropicProvider` (accepts `model`/`max_retries`/
+  `timeout`) or a narrower constructor like `FakeProvider`'s (`model` only). `max_tokens` is handled
+  separately -- it has no provider-constructor equivalent (it's a per-request `ChatRequest` field) --
+  via `Engine.default_max_tokens`, set from `config.provider_config(config.engine.default_provider)
+  .max_tokens` and used as the request builder's fallback instead of a hardcoded literal. See
+  [`providers.md`](providers.md) §1 for the full mechanism and worked examples.
 - **`aiforge.utils`** is the dependency-free foundation every other package sits on: `cache.py`
   (`TTLCache`, `@cached`), `serialization.py` (`dumps`/`dumps_bytes`/`loads`, orjson-accelerated
   when installed), `async_utils.py` (`bounded_gather`), `lazy.py` (`lazy_getattr`/`lazy_dir`, the
@@ -249,7 +253,9 @@ collisions between unrelated registrations aren't possible.
      joins whichever of those three are non-empty with a blank line; each selected skill
      contributes a `## <name> skill` section via `SkillManifest.prompt_guidance()`.
    - Builds a `build_request(model) -> ChatRequest` closure: a single `Message(role=Role.USER,
-     content=request.prompt)`, `max_tokens=request.max_tokens or 4096`, the composed `system`, and
+     content=request.prompt)`, `max_tokens=request.max_tokens or self.default_max_tokens`
+     (`default_max_tokens` defaults to `4096` and, via `Engine.from_config()`, reflects
+     `[providers.<default provider>].max_tokens` when set), the composed `system`, and
      `stream=request.stream`.
 2. **`self.events.emit("engine.request_started", skills=[m.name for m in resolved.selected])`**
    publishes an `Event` on the `EventBus` (synchronous, in-process; handlers run in subscription
