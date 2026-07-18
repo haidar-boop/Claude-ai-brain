@@ -1,0 +1,39 @@
+# Nexus configuration -- every value below is optional and shown at its
+# default. Copy this file to your data directory as `config.yaml` (Nexus picks
+# it up automatically), or pass it explicitly with `nexus --config path.yaml`.
+#
+# Precedence, lowest to highest: built-in defaults < this file < environment
+# variables of the form NEXUS_<SECTION>_<KEY> (e.g. NEXUS_UI_THEME=light).
+# Credentials are never configured here -- providers read keys from the
+# environment (e.g. ANTHROPIC_API_KEY).
+
+ui:
+  theme: dark            # "dark" or "light"
+  window_width: 1280     # minimum 640
+  window_height: 800     # minimum 480
+  remember_layout: true
+
+database:
+  echo_sql: false        # log every SQL statement (noisy; for debugging)
+  backup_on_start: true  # snapshot the database each time the app opens
+  max_backups: 10        # keep this many rotating snapshots
+  encrypt_sensitive: true  # encrypt sensitive columns at rest (Fernet)
+
+logging:
+  level: INFO            # CRITICAL | ERROR | WARNING | INFO | DEBUG
+  json: false            # emit structured JSON log lines
+  to_file: true          # also write a rotating log file under <data>/logs
+
+ai:
+  # "fake" ships on by default: it needs no API key and costs nothing, so the
+  # assistant works out of the box. Switch to "anthropic" (and export
+  # ANTHROPIC_API_KEY) to use a real model via the AIForge provider layer.
+  default_provider: fake
+  default_model: null    # null = the provider's own default model
+  embedding_dimensions: 256   # local semantic-search vector size (>= 16)
+  max_history_messages: 50    # chat turns sent as context per request
+
+api:
+  enabled: false         # the local REST API is off by default
+  host: 127.0.0.1        # bind to localhost only
+  port: 8770

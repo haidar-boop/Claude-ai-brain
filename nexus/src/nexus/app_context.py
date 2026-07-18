@@ -81,9 +81,14 @@ class AppContext:
 
         This is the normal entry point. *data_dir* overrides where Nexus
         stores its database, backups, and logs (defaulting to the platform
-        data directory); *config_path* points at a ``config.yaml``.
+        data directory); *config_path* points at a ``config.yaml``. When
+        *config_path* is omitted, a ``config.yaml`` sitting in the data
+        directory is picked up automatically, so dropping a config file next
+        to the database is all it takes to configure an install.
         """
         paths = AppPaths.create(data_dir)
+        if config_path is None and paths.config.is_file():
+            config_path = paths.config
         config = load_config(config_path)
         configure(config.logging, log_dir=paths.logs)
         database = Database.open(

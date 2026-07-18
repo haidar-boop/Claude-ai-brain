@@ -64,6 +64,10 @@ class AppPaths:
     def encryption_key(self) -> Path:
         return self.base / "nexus.key"
 
+    @property
+    def config(self) -> Path:
+        return self.base / "config.yaml"
+
     @classmethod
     def create(cls, base: Path | str | None = None) -> AppPaths:
         """Build an :class:`AppPaths` and ensure every directory exists.
