@@ -55,7 +55,9 @@ class AppContext:
         # The rule engine makes stored workflow rules live: it subscribes to
         # the event bus and runs each enabled rule's actions when its trigger
         # fires. Loading here means automation is on as soon as the app starts.
-        self.automation_engine = RuleEngine(self.events, default_action_registry(self.events))
+        # The action registry is exposed so plugins can register new actions.
+        self.automation_actions = default_action_registry(self.events)
+        self.automation_engine = RuleEngine(self.events, self.automation_actions)
         loaded = self.automation.load_into(self.automation_engine)
         _logger.info("application context ready (%d automation rule(s) loaded)", loaded)
 
