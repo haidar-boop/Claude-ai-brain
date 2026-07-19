@@ -46,9 +46,11 @@ class _StatCard(QFrame):
 
     def __init__(self, caption: str) -> None:
         super().__init__()
+        self.setObjectName("statCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         layout = QVBoxLayout(self)
         self._value = QLabel("0")
+        self._value.setObjectName("statValue")
         font = self._value.font()
         font.setPointSize(font.pointSize() + 8)
         font.setBold(True)
